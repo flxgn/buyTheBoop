@@ -1,11 +1,12 @@
 mod exchange;
 mod processor;
-mod logging;
+mod strategy;
+mod tools;
 #[macro_use]
 extern crate lazy_static;
 #[macro_use]
 extern crate simple_error;
 
 fn main() {
-    logging::setup();
+    tools::logging::setup();
 }
