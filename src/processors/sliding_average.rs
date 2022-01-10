@@ -1,25 +1,5 @@
 use crossbeam::channel;
-use uuid::Uuid;
-
-pub type Timestamp = i64;
-pub type Price = f64;
-pub type PairId<'a> = &'a str;
-pub type EventId = Uuid;
-
-#[derive(Debug, PartialEq, Clone, Default)]
-pub struct PriceUpdated<'a> {
-    id: EventId,
-    pair_id: PairId<'a>,
-    datetime: Timestamp,
-    price: Price,
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub enum Msg<'a> {
-    LivePriceUpdated(PriceUpdated<'a>),
-    AveragePriceUpdated(PriceUpdated<'a>),
-    Shutdown,
-}
+use crate::messages::{Msg, PriceUpdated};
 
 pub struct Processor<'a> {
     pub input: channel::Receiver<Msg<'a>>,
@@ -29,6 +9,9 @@ pub struct Processor<'a> {
 
     events: Vec<TimePricePoint>,
 }
+
+pub type Timestamp = i64;
+pub type Price = f64;
 
 struct TimePricePoint {
     datetime: Timestamp,

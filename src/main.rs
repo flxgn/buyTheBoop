@@ -1,6 +1,7 @@
 mod exchanges;
 mod processors;
 mod strategies;
+mod messages;
 mod tools;
 #[macro_use]
 extern crate lazy_static;
