@@ -1,6 +1,6 @@
-mod exchange;
-mod processor;
-mod strategy;
+mod exchanges;
+mod processors;
+mod strategies;
 mod tools;
 #[macro_use]
 extern crate lazy_static;

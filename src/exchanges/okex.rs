@@ -6,7 +6,7 @@ use websocket::client::sync::Client;
 use websocket::stream::sync::NetworkStream;
 use websocket::{ClientBuilder, Message};
 use serde::{Deserialize, Serialize};
-use crate::exchange::{Exchange, ExchangeStreamEvent, Subscription, Pair, MarketOrder, OrderType, Order};
+use crate::exchanges::{Exchange, ExchangeStreamEvent, Subscription, Pair, MarketOrder, OrderType, Order};
 use serde_json::Value;
 use uuid::Uuid;
 use std::collections::HashMap;
@@ -407,7 +407,7 @@ struct Instrument {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::exchange::Order;
+    use crate::exchanges::Order;
 
     #[test]
     fn unit_test_deserialize_instrument() {
