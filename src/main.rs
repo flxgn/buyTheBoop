@@ -1,6 +1,5 @@
 mod exchanges;
 mod processors;
-mod strategies;
 mod messages;
 mod tools;
 #[macro_use]

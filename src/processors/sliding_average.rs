@@ -1,14 +1,6 @@
-use crossbeam::channel;
 use crate::messages::{Msg, PriceUpdated};
+use crate::processors::Aggregator;
 
-pub struct Processor<'a> {
-    pub input: channel::Receiver<Msg<'a>>,
-    pub output: channel::Sender<Msg<'a>>,
-    pub is_filter: bool,
-    pub window_millis: i64,
-
-    events: Vec<TimePricePoint>,
-}
 
 pub type Timestamp = i64;
 pub type Price = f64;
@@ -18,37 +10,35 @@ struct TimePricePoint {
     price: Price,
 }
 
-impl<'a> Processor<'a> {
-    pub fn start(mut self) {
-        loop {
-            let e = self.input.recv().expect("open channel");
-            match &e {
-                Msg::Shutdown => break,
-                Msg::LivePriceUpdated(e) => {
-                    self.events.push(TimePricePoint {
-                        datetime: e.datetime,
-                        price: e.price,
-                    });
-                    self.events
-                        .retain(|i| i.datetime >= e.datetime - self.window_millis as i64);
-                    let sum: f64 = self.events.iter().map(|e| e.price).sum();
-                    let avg = PriceUpdated {
-                        pair_id: e.pair_id,
-                        datetime: e.datetime,
-                        price: sum / self.events.len() as f64,
-                        ..Default::default()
-                    };
-                    if self.events.len() > 1 {
-                        self.output
-                            .send(Msg::AveragePriceUpdated(avg))
-                            .expect("open channel");
-                    }
+pub struct SlidingAverageAggregator {
+    pub window_millis: i64,
+    events: Vec<TimePricePoint>,
+}
+
+impl<'a> Aggregator<'a> for SlidingAverageAggregator {
+    fn aggregate(&mut self, msg: &Msg<'a>) -> Vec<Msg<'a>> {
+        match msg {
+            Msg::LivePriceUpdated(e) => {
+                self.events.push(TimePricePoint {
+                    datetime: e.datetime,
+                    price: e.price,
+                });
+                self.events
+                    .retain(|i| i.datetime >= e.datetime - self.window_millis as i64);
+                let sum: f64 = self.events.iter().map(|e| e.price).sum();
+                let avg = PriceUpdated {
+                    pair_id: e.pair_id,
+                    datetime: e.datetime,
+                    price: sum / self.events.len() as f64,
+                    ..Default::default()
+                };
+                if self.events.len() > 1 {
+                    return vec![Msg::AveragePriceUpdated(avg)];
+                } else {
+                    return vec![];
                 }
-                _ => (),
             }
-            if !self.is_filter {
-                self.output.send(e).expect("open channel")
-            }
+            _ => return vec![],
         }
     }
 }
@@ -56,58 +46,13 @@ impl<'a> Processor<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crossbeam::channel::unbounded;
     use pretty_assertions::assert_eq;
 
     const SECOND: i64 = 1_000;
 
-    fn new_processor<'a>(
-        window_millis: i64,
-        is_filter: bool,
-    ) -> (
-        Processor<'a>,
-        channel::Sender<Msg<'a>>,
-        channel::Receiver<Msg<'a>>,
-    ) {
-        let (in_s, in_r) = unbounded();
-        let (out_s, out_r) = unbounded();
-        (
-            Processor {
-                input: in_r,
-                output: out_s,
-                is_filter,
-                window_millis,
-                events: vec![],
-            },
-            in_s,
-            out_r,
-        )
-    }
-
     #[test]
-    fn processor_should_exit_if_shutdown_received() {
-        let (processor, in_s, _) = new_processor(0, false);
-        in_s.send(Msg::Shutdown).unwrap();
-        processor.start();
-        assert!(true);
-    }
-
-    #[test]
-    fn processor_should_output_events_if_not_filtered() {
-        let (processor, in_s, out_r) = new_processor(0, false);
-        let expected_e = Msg::LivePriceUpdated(PriceUpdated {
-            ..Default::default()
-        });
-        in_s.send(expected_e.clone()).unwrap();
-        in_s.send(Msg::Shutdown).unwrap();
-        processor.start();
-        let actual_e = out_r.recv().unwrap();
-        assert_eq!(expected_e, actual_e);
-    }
-
-    #[test]
-    fn processor_should_emit_average_price_update() {
-        let (processor, in_s, out_r) = new_processor(SECOND, true);
+    fn aggr_should_emit_average_price_update() {
+        let mut aggregator = SlidingAverageAggregator{ window_millis: SECOND, events: vec![] };
         let e1 = Msg::LivePriceUpdated(PriceUpdated {
             pair_id: "pair_id",
             datetime: 0,
@@ -120,24 +65,20 @@ mod tests {
             price: 2.0,
             ..Default::default()
         });
-        in_s.send(e1).unwrap();
-        in_s.send(e2).unwrap();
-        in_s.send(Msg::Shutdown).unwrap();
-        processor.start();
-
-        let actual_e = out_r.recv().unwrap();
-        let expected_e = Msg::AveragePriceUpdated(PriceUpdated {
+        aggregator.aggregate(&e1);
+        let actual_e = aggregator.aggregate(&e2);
+        let expected_e = vec![Msg::AveragePriceUpdated(PriceUpdated {
             pair_id: "pair_id",
             datetime: SECOND,
             price: 1.5,
             ..Default::default()
-        });
+        })];
         assert_eq!(expected_e, actual_e)
     }
 
     #[test]
-    fn processor_should_calculate_prices_from_given_sliding_window() {
-        let (processor, in_s, out_r) = new_processor(SECOND, true);
+    fn aggr_should_calculate_prices_from_given_sliding_window() {
+        let mut aggregator = SlidingAverageAggregator{ window_millis: SECOND, events: vec![] };
         let e1 = Msg::LivePriceUpdated(PriceUpdated {
             datetime: 0,
             price: 1.0,
@@ -153,26 +94,22 @@ mod tests {
             price: 3.0,
             ..Default::default()
         });
-        in_s.send(e1).unwrap();
-        in_s.send(e2).unwrap();
-        in_s.send(e3).unwrap();
-        in_s.send(Msg::Shutdown).unwrap();
-        processor.start();
+        aggregator.aggregate(&e1);
+        let actual_e1 = aggregator.aggregate(&e2);
+        let actual_e2 = aggregator.aggregate(&e3);
 
-        let actual_e1 = out_r.recv().unwrap();
-        let expected_e1 = Msg::AveragePriceUpdated(PriceUpdated {
+        let expected_e1 = vec![Msg::AveragePriceUpdated(PriceUpdated {
             datetime: SECOND,
             price: 1.5,
             ..Default::default()
-        });
+        })];
         assert_eq!(expected_e1, actual_e1);
 
-        let actual_e2 = out_r.recv().unwrap();
-        let expected_e2 = Msg::AveragePriceUpdated(PriceUpdated {
+        let expected_e2 = vec![Msg::AveragePriceUpdated(PriceUpdated {
             datetime: SECOND * 2,
             price: 2.5,
             ..Default::default()
-        });
+        })];
         assert_eq!(expected_e2, actual_e2);
     }
 }
