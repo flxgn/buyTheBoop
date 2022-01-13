@@ -17,5 +17,7 @@ pub struct PriceUpdated<'a> {
 pub enum Msg<'a> {
     LivePriceUpdated(PriceUpdated<'a>),
     AveragePriceUpdated(PriceUpdated<'a>),
+    Buy,
+    Sell,
     Shutdown,
 }

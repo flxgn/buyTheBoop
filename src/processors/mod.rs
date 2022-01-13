@@ -1,5 +1,5 @@
-pub mod sliding_average;
 pub mod simple_crossover;
+pub mod sliding_average;
 
 use crate::messages::Msg;
 use crossbeam::channel;

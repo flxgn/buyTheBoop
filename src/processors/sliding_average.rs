@@ -1,15 +1,16 @@
 use crate::messages::{Msg, PriceUpdated};
 use crate::processors::Aggregator;
 
-
 pub type Timestamp = i64;
 pub type Price = f64;
 
+#[derive(Debug, PartialEq, Clone, Default)]
 struct TimePricePoint {
     datetime: Timestamp,
     price: Price,
 }
 
+#[derive(Debug, PartialEq, Clone, Default)]
 pub struct SlidingAverageAggregator {
     pub window_millis: i64,
     events: Vec<TimePricePoint>,
@@ -52,7 +53,10 @@ mod tests {
 
     #[test]
     fn aggr_should_emit_average_price_update() {
-        let mut aggregator = SlidingAverageAggregator{ window_millis: SECOND, events: vec![] };
+        let mut aggregator = SlidingAverageAggregator {
+            window_millis: SECOND,
+            events: vec![],
+        };
         let e1 = Msg::LivePriceUpdated(PriceUpdated {
             pair_id: "pair_id",
             datetime: 0,
@@ -78,7 +82,10 @@ mod tests {
 
     #[test]
     fn aggr_should_calculate_prices_from_given_sliding_window() {
-        let mut aggregator = SlidingAverageAggregator{ window_millis: SECOND, events: vec![] };
+        let mut aggregator = SlidingAverageAggregator {
+            window_millis: SECOND,
+            events: vec![],
+        };
         let e1 = Msg::LivePriceUpdated(PriceUpdated {
             datetime: 0,
             price: 1.0,
