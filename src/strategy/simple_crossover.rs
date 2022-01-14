@@ -1,5 +1,5 @@
-use crate::messages::{Msg, Price};
-use crate::processors::Aggregator;
+use crate::messaging::message::{Msg, Price};
+use crate::messaging::processor::Aggregator;
 
 #[derive(Debug, PartialEq, Clone, Default)]
 pub struct SimpleCrossover {
@@ -19,17 +19,20 @@ impl<'a> Aggregator<'a> for SimpleCrossover {
     fn aggregate(&mut self, msg: &Msg<'a>) -> Vec<Msg<'a>> {
         match msg {
             Msg::LivePriceUpdated(e) => {
-                let result = self.latest_live.and_then(|live| {
-                    self.latest_average.map(|avg| {
-                        if e.price > avg && live < avg {
-                            vec![Msg::Buy]
-                        } else if e.price < avg && live > avg {
-                            vec![Msg::Sell]
-                        } else {
-                            vec![]
-                        }
+                let result = self
+                    .latest_live
+                    .and_then(|live| {
+                        self.latest_average.map(|avg| {
+                            if e.price > avg && live < avg {
+                                vec![Msg::Buy]
+                            } else if e.price < avg && live > avg {
+                                vec![Msg::Sell]
+                            } else {
+                                vec![]
+                            }
+                        })
                     })
-                }).unwrap_or(vec![]);
+                    .unwrap_or(vec![]);
                 self.latest_live = Some(e.price);
                 result
             }
@@ -37,7 +40,7 @@ impl<'a> Aggregator<'a> for SimpleCrossover {
                 self.latest_average = Some(e.price);
                 vec![]
             }
-            _ => return vec![],
+            _ => vec![],
         }
     }
 }
@@ -45,7 +48,7 @@ impl<'a> Aggregator<'a> for SimpleCrossover {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::messages::PriceUpdated;
+    use crate::messaging::message::PriceUpdated;
     use pretty_assertions::assert_eq;
 
     const SECOND: i64 = 1_000;

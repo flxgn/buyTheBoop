@@ -1,5 +1,5 @@
-use crate::messages::{Msg, PriceUpdated};
-use crate::processors::Aggregator;
+use crate::messaging::message::{Msg, PriceUpdated};
+use crate::messaging::processor::Aggregator;
 
 pub type Timestamp = i64;
 pub type Price = f64;

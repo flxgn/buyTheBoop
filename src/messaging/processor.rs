@@ -1,7 +1,4 @@
-pub mod simple_crossover;
-pub mod sliding_average;
-
-use crate::messages::Msg;
+use crate::messaging::message::Msg;
 use crossbeam::channel;
 
 pub struct Processor<'a, T>
@@ -42,7 +39,7 @@ pub trait Aggregator<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::messages::PriceUpdated;
+    use crate::messaging::message::PriceUpdated;
     use crossbeam::channel::unbounded;
     use pretty_assertions::assert_eq;
 
