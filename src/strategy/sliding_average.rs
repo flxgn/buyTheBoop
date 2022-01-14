@@ -11,21 +11,21 @@ struct TimePricePoint {
 }
 
 #[derive(Debug, PartialEq, Clone, Default)]
-pub struct SlidingAverageAggregator {
+pub struct SlidingAverage {
     pub window_millis: i64,
     events: Vec<TimePricePoint>,
 }
 
-impl SlidingAverageAggregator {
+impl SlidingAverage {
     pub fn new(window_millis: i64) -> Self {
-        SlidingAverageAggregator {
+        SlidingAverage {
             window_millis,
             events: vec![],
         }
     }
 }
 
-impl<'a> Aggregator<'a> for SlidingAverageAggregator {
+impl<'a> Aggregator<'a> for SlidingAverage {
     fn aggregate(&mut self, msg: &Msg<'a>) -> Vec<Msg<'a>> {
         match msg {
             Msg::LivePriceUpdated(e) => {
@@ -62,7 +62,7 @@ mod tests {
 
     #[test]
     fn aggr_should_emit_average_price_update() {
-        let mut aggregator = SlidingAverageAggregator::new(SECOND);
+        let mut aggregator = SlidingAverage::new(SECOND);
         let e1 = Msg::LivePriceUpdated(PriceUpdated {
             pair_id: "pair_id",
             datetime: 0,
@@ -88,7 +88,7 @@ mod tests {
 
     #[test]
     fn aggr_should_calculate_prices_from_given_sliding_window() {
-        let mut aggregator = SlidingAverageAggregator::new(SECOND);
+        let mut aggregator = SlidingAverage::new(SECOND);
         let e1 = Msg::LivePriceUpdated(PriceUpdated {
             datetime: 0,
             price: 1.0,
