@@ -164,6 +164,27 @@ mod tests {
     }
 
     #[async_std::test]
+    async fn should_sell_different_max_amount_if_coin_exists() {
+        let mut exchange = MockExchange::new(Assets {
+            fiat: None,
+            coin: Some(Asset {
+                amount: 0.0002,
+                name: "BTC".into(),
+            }),
+        });
+        let mut trader = Trader::new(&mut exchange);
+        trader.execute(&Msg::Sell).await.unwrap();
+        let expected = vec![MarketOrder {
+            bid_currency: "EUR".into(),
+            ask_currency: "BTC".into(),
+            amount: 0.0002,
+            order_type: OrderType::Sell,
+        }];
+        let actual = exchange.recorded_orders;
+        assert_eq!(expected, actual)
+    }
+
+    #[async_std::test]
     async fn should_not_sell_if_coin_not_exists() {
         let mut exchange = MockExchange::new(Assets {
             ..Default::default()
