@@ -59,7 +59,7 @@ where
                     order_type,
                 })
                 .await;
-            return result
+            return result;
         }
     }
     Ok(())
@@ -67,7 +67,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::exchange::{MockExchange, Assets};
+    use crate::exchange::{Assets, MockExchange};
 
     use super::*;
     use pretty_assertions::assert_eq;

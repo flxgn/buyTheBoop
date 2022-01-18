@@ -125,7 +125,7 @@ mod tests {
                 name: "BTW".into(),
                 amount: 0.01,
             }),
-        }; 
+        };
         let exchange = MockExchange::new(given_assets.clone());
         let actual = exchange.fetch_assets().await.unwrap();
         assert_eq!(given_assets, actual)
@@ -133,7 +133,9 @@ mod tests {
 
     #[async_std::test]
     async fn mock_should_record_placed_marked_orders() {
-        let mut exchange = MockExchange::new(Assets {..Default::default()});
+        let mut exchange = MockExchange::new(Assets {
+            ..Default::default()
+        });
         let expected_order = MarketOrder {
             bid_currency: "EUR".into(),
             ask_currency: "BTC".into(),
@@ -146,7 +148,9 @@ mod tests {
 
     #[async_std::test]
     async fn mock_should_record_different_placed_marked_orders() {
-        let mut exchange = MockExchange::new(Assets {..Default::default()});
+        let mut exchange = MockExchange::new(Assets {
+            ..Default::default()
+        });
         let expected_order = MarketOrder {
             bid_currency: "BTC".into(),
             ask_currency: "EUR".into(),

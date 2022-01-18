@@ -1,26 +1,28 @@
-use websocket::{OwnedMessage, WebSocketError};
+use crate::exchange::{
+    Assets, Exchange, ExchangeStreamEvent, MarketOrder, Order, OrderType, Pair, Subscription,
+};
+use crate::tools::networking::HttpClient;
+use anyhow::{anyhow, Result};
+use async_trait::async_trait;
+use cast::i8;
+use chrono::prelude::{SecondsFormat, Utc};
+use crossbeam::channel::{unbounded, Receiver, Sender};
 use flate2::read::DeflateDecoder;
-use log::{info, error};
+use hmac::{Hmac, Mac};
+use log::{error, info};
+use math::round;
+use reqwest::header::{HeaderMap, HeaderValue, CONTENT_TYPE};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use sha2::Sha256;
+use std::collections::HashMap;
 use std::io::prelude::Read;
+use std::{env, thread};
+use uuid::Uuid;
 use websocket::client::sync::Client;
 use websocket::stream::sync::NetworkStream;
 use websocket::{ClientBuilder, Message};
-use serde::{Deserialize, Serialize};
-use crate::exchange::{Exchange, ExchangeStreamEvent, Subscription, Pair, MarketOrder, OrderType, Order, Assets};
-use serde_json::Value;
-use uuid::Uuid;
-use std::collections::HashMap;
-use math::round;
-use cast::i8;
-use crossbeam::channel::{Sender, Receiver, unbounded};
-use sha2::Sha256;
-use reqwest::header::{HeaderMap, HeaderValue, CONTENT_TYPE};
-use chrono::prelude::{Utc, SecondsFormat};
-use hmac::{Hmac, Mac};
-use std::{env, thread};
-use async_trait::async_trait;
-use anyhow::{Result, anyhow};
-use crate::tools::networking::HttpClient;
+use websocket::{OwnedMessage, WebSocketError};
 
 lazy_static! {
     static ref API_KEY: String = env::var("OKEX_API_KEY").unwrap();
@@ -33,11 +35,14 @@ static WEBSOCKET_CHUNK_SIZE: usize = 100;
 
 #[derive(Debug)]
 pub struct Okex {
-    size_increments: HashMap<Uuid, i8>
+    size_increments: HashMap<Uuid, i8>,
 }
 
 impl Okex {
-    pub async fn new<C>(client: C) -> Okex where C: HttpClient {
+    pub async fn new<C>(client: C) -> Okex
+    where
+        C: HttpClient,
+    {
         Okex {
             size_increments: create_size_increments_map().await,
         }
@@ -45,14 +50,21 @@ impl Okex {
 }
 
 async fn create_size_increments_map() -> HashMap<Uuid, i8> {
-    let pair_details = reqwest::get("https://www.okex.com/api/spot/v3/instruments").await.unwrap().text().await.unwrap();
+    let pair_details = reqwest::get("https://www.okex.com/api/spot/v3/instruments")
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
     let pair_details: Vec<PairDetail> = serde_json::from_str(&pair_details).unwrap();
-    pair_details.iter().fold(HashMap::new(), |mut acc, pair_detail| {
-        let id = Uuid::new_v3(&Uuid::NAMESPACE_OID, pair_detail.instrument_id.as_bytes());
-        let size_increment = calculate_size_increment(&pair_detail.size_increment);
-        acc.insert(id, size_increment);
-        acc
-    })
+    pair_details
+        .iter()
+        .fold(HashMap::new(), |mut acc, pair_detail| {
+            let id = Uuid::new_v3(&Uuid::NAMESPACE_OID, pair_detail.instrument_id.as_bytes());
+            let size_increment = calculate_size_increment(&pair_detail.size_increment);
+            acc.insert(id, size_increment);
+            acc
+        })
 }
 
 fn calculate_size_increment(size_increment: &String) -> i8 {
@@ -74,9 +86,11 @@ struct PairDetail {
     tick_size: String,
 }
 
-fn websocket_worker(mut client: Client<Box<dyn NetworkStream + Send>>,
-                    message: String,
-                    sender: Sender<Result<OwnedMessage, WebSocketError>>) {
+fn websocket_worker(
+    mut client: Client<Box<dyn NetworkStream + Send>>,
+    message: String,
+    sender: Sender<Result<OwnedMessage, WebSocketError>>,
+) {
     let message = Message::text(message);
     client.send_message(&message).unwrap();
     loop {
@@ -89,9 +103,9 @@ fn websocket_worker(mut client: Client<Box<dyn NetworkStream + Send>>,
 impl Exchange for Okex {
     async fn fetch_assets(&self) -> Result<Assets> {
         unimplemented!()
-    } 
+    }
 
-    async fn event_stream<'a>(&'a self) -> Box<dyn Iterator<Item=ExchangeStreamEvent> + 'a> {
+    async fn event_stream<'a>(&'a self) -> Box<dyn Iterator<Item = ExchangeStreamEvent> + 'a> {
         let (sender, receiver) = unbounded();
         for (client, message) in client_pool().await {
             let cloned_sender = sender.clone();
@@ -99,7 +113,10 @@ impl Exchange for Okex {
                 websocket_worker(client, message, cloned_sender);
             });
         }
-        let iterator = EventStream { receiver, intermediate_pair_store: HashMap::new() };
+        let iterator = EventStream {
+            receiver,
+            intermediate_pair_store: HashMap::new(),
+        };
         Box::new(iterator)
     }
 
@@ -117,13 +134,15 @@ impl Exchange for Okex {
             OrderType::Buy => "notional",
             OrderType::Sell => "size",
         };
-        let instrument_id = vec![order.bid_currency.as_str(), order.ask_currency.as_str()].join("-");
+        let instrument_id =
+            vec![order.bid_currency.as_str(), order.ask_currency.as_str()].join("-");
 
         let rounded_amount = match order.order_type {
             OrderType::Buy => order.amount.to_string(),
             OrderType::Sell => {
                 let instrument_uuid = Uuid::new_v3(&Uuid::NAMESPACE_OID, instrument_id.as_bytes());
-                let size_increment: i8 = self.size_increments.get(&instrument_uuid).unwrap().clone();
+                let size_increment: i8 =
+                    self.size_increments.get(&instrument_uuid).unwrap().clone();
                 round::floor(order.amount, size_increment).to_string()
             }
         };
@@ -149,22 +168,31 @@ impl Exchange for Okex {
 
         let mut header_map = HeaderMap::new();
         header_map.insert("OK-ACCESS-KEY", HeaderValue::from_str(&API_KEY).unwrap());
-        header_map.insert("OK-ACCESS-SIGN", HeaderValue::from_str(&base64_signature).unwrap());
-        header_map.insert("OK-ACCESS-TIMESTAMP", HeaderValue::from_str(&timestamp).unwrap());
-        header_map.insert("OK-ACCESS-PASSPHRASE", HeaderValue::from_str(&API_PASSPHRASE).unwrap());
+        header_map.insert(
+            "OK-ACCESS-SIGN",
+            HeaderValue::from_str(&base64_signature).unwrap(),
+        );
+        header_map.insert(
+            "OK-ACCESS-TIMESTAMP",
+            HeaderValue::from_str(&timestamp).unwrap(),
+        );
+        header_map.insert(
+            "OK-ACCESS-PASSPHRASE",
+            HeaderValue::from_str(&API_PASSPHRASE).unwrap(),
+        );
         header_map.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
 
         let client = reqwest::Client::new();
         let mut complete_url = String::from("https://www.okex.com");
         complete_url.push_str(request_path);
 
-
         if MOCK_SENDING {
             match client
                 .post(complete_url.as_str())
                 .headers(header_map)
                 .body(body_str)
-                .build() {
+                .build()
+            {
                 Ok(res) => {
                     info!("{:#?}", res.body());
                     Result::Ok(())
@@ -180,7 +208,8 @@ impl Exchange for Okex {
                 .headers(header_map)
                 .body(body_str)
                 .send()
-                .await {
+                .await
+            {
                 Ok(mut res) => {
                     let res_text = res.text().await.unwrap();
                     info!("{}", res_text);
@@ -214,7 +243,7 @@ impl Iterator for EventStream {
             Ok(m) => m,
             Err(_e) => return None,
         };
-//        info!("Len: {}", self.receiver.len());
+        //        info!("Len: {}", self.receiver.len());
         match msg {
             OwnedMessage::Close(_) => {
                 error!("recv Close");
@@ -247,12 +276,14 @@ impl Iterator for EventStream {
                         let bid_orders = parse_orders(bids);
                         let ask_orders = parse_orders(data["asks"].as_array().unwrap());
                         let instrument_id = data["instrument_id"].as_str().unwrap();
-//                        println!("{} - {}", instrument_id, bids.len());
+                        //                        println!("{} - {}", instrument_id, bids.len());
                         let id = Uuid::new_v3(&Uuid::NAMESPACE_OID, instrument_id.as_bytes());
-                        let pair = create_updated_pair(&mut self.intermediate_pair_store,
-                                                       id,
-                                                       bid_orders,
-                                                       ask_orders);
+                        let pair = create_updated_pair(
+                            &mut self.intermediate_pair_store,
+                            id,
+                            bid_orders,
+                            ask_orders,
+                        );
                         Some(ExchangeStreamEvent::Pair(pair))
                     } else {
                         println!("table");
@@ -263,14 +294,15 @@ impl Iterator for EventStream {
                     None
                 }
             }
-            _s => None
+            _s => None,
         }
     }
 }
 
 // TODO: This function needs major refactoring. This should be done with a serde struct.
 fn parse_orders(raw_orders: &Vec<Value>) -> Vec<Order> {
-    raw_orders.iter()
+    raw_orders
+        .iter()
         .map(|el| {
             let el = el.as_array().unwrap();
             Order {
@@ -281,22 +313,34 @@ fn parse_orders(raw_orders: &Vec<Value>) -> Vec<Order> {
         .collect()
 }
 
-fn create_updated_pair(intermediate_pair_store: &mut HashMap<Uuid, Pair>,
-                       id: Uuid,
-                       bid_orders: Vec<Order>,
-                       ask_orders: Vec<Order>) -> Pair {
+fn create_updated_pair(
+    intermediate_pair_store: &mut HashMap<Uuid, Pair>,
+    id: Uuid,
+    bid_orders: Vec<Order>,
+    ask_orders: Vec<Order>,
+) -> Pair {
     match intermediate_pair_store.get_mut(&id) {
         Some(p) => {
-            bid_orders.iter().map(|order| {
-                add_to_bid_orders(&mut p.bid_orders, *order);
-            }).for_each(drop);
-            ask_orders.iter().map(|order| {
-                add_to_ask_orders(&mut p.ask_orders, *order);
-            }).for_each(drop);
+            bid_orders
+                .iter()
+                .map(|order| {
+                    add_to_bid_orders(&mut p.bid_orders, *order);
+                })
+                .for_each(drop);
+            ask_orders
+                .iter()
+                .map(|order| {
+                    add_to_ask_orders(&mut p.ask_orders, *order);
+                })
+                .for_each(drop);
             p.clone()
         }
         None => {
-            let pair = Pair { id, bid_orders, ask_orders };
+            let pair = Pair {
+                id,
+                bid_orders,
+                ask_orders,
+            };
             intermediate_pair_store.insert(id, pair.clone());
             pair
         }
@@ -313,9 +357,7 @@ fn add_to_bid_orders(orders: &mut Vec<Order>, new_order: Order) {
     add_to_orders(orders, new_order, &position)
 }
 
-fn add_to_orders(orders: &mut Vec<Order>,
-                 new_order: Order,
-                 position: &Result<usize, usize>) {
+fn add_to_orders(orders: &mut Vec<Order>, new_order: Order, position: &Result<usize, usize>) {
     match position {
         Ok(pos) => {
             orders.remove(*pos);
@@ -353,11 +395,17 @@ pub async fn client_pool() -> Vec<(Client<Box<dyn NetworkStream + Send>>, String
 pub fn client() -> Client<Box<dyn NetworkStream + Send>> {
     ClientBuilder::new("wss://real.okex.com:10442/ws/v3")
         .expect("fail new ws client")
-        .connect(None).unwrap()
+        .connect(None)
+        .unwrap()
 }
 
 async fn get_instruments() -> String {
-    reqwest::get("https://www.okex.com/api/spot/v3/instruments/ticker").await.unwrap().text().await.unwrap()
+    reqwest::get("https://www.okex.com/api/spot/v3/instruments/ticker")
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap()
 }
 
 fn make_subscription_message(instruments: &str) -> Vec<String> {
@@ -371,13 +419,14 @@ fn deserialize_instruments(instruments: &str) -> Vec<Instrument> {
 }
 
 fn to_subscription_message(instruments: &Vec<Instrument>) -> Vec<String> {
-    instruments.chunks(WEBSOCKET_CHUNK_SIZE).into_iter()
+    instruments
+        .chunks(WEBSOCKET_CHUNK_SIZE)
+        .into_iter()
         .fold(Vec::new(), |mut acc, instruments| {
-            let args = instruments.iter()
-                .fold(Vec::new(), |mut acc, instrument| {
-                    acc.push(format!("spot/depth:{}", &instrument.instrument_id));
-                    acc
-                });
+            let args = instruments.iter().fold(Vec::new(), |mut acc, instrument| {
+                acc.push(format!("spot/depth:{}", &instrument.instrument_id));
+                acc
+            });
             acc.push(format!(r#"{{"op": "subscribe", "args": {:?}}}"#, args));
             acc
         })
@@ -409,9 +458,16 @@ mod tests {
         let actual_instruments: Vec<Instrument> = serde_json::from_str(input).unwrap();
 
         assert_eq!(
-            vec![Instrument { instrument_id: String::from("LTC-BTC") },
-                 Instrument { instrument_id: String::from("LTC-BTC") }],
-            actual_instruments)
+            vec![
+                Instrument {
+                    instrument_id: String::from("LTC-BTC")
+                },
+                Instrument {
+                    instrument_id: String::from("LTC-BTC")
+                }
+            ],
+            actual_instruments
+        )
     }
 
     #[test]
@@ -420,57 +476,175 @@ mod tests {
                               {"instrument_id":"ETH-USDT"}]"#;
 
         let actual_message = make_subscription_message(instruments);
-        assert_eq!(vec![r#"{"op": "subscribe", "args": ["spot/depth:LTC-BTC", "spot/depth:ETH-USDT"]}"#],
-                   actual_message)
+        assert_eq!(
+            vec![r#"{"op": "subscribe", "args": ["spot/depth:LTC-BTC", "spot/depth:ETH-USDT"]}"#],
+            actual_message
+        )
     }
 
     #[test]
     fn unit_test_add_to_ask_orders() {
-        let mut orders = vec![Order { price: 0.0, amount: 1.0 },
-                              Order { price: 1.0, amount: 2.0 },
-                              Order { price: 3.0, amount: 1.0 }];
-        let new_order = Order { price: 2.0, amount: 1.0 };
+        let mut orders = vec![
+            Order {
+                price: 0.0,
+                amount: 1.0,
+            },
+            Order {
+                price: 1.0,
+                amount: 2.0,
+            },
+            Order {
+                price: 3.0,
+                amount: 1.0,
+            },
+        ];
+        let new_order = Order {
+            price: 2.0,
+            amount: 1.0,
+        };
         add_to_ask_orders(&mut orders, new_order);
-        assert_eq!(vec![Order { price: 0.0, amount: 1.0 },
-                        Order { price: 1.0, amount: 2.0 },
-                        Order { price: 2.0, amount: 1.0 },
-                        Order { price: 3.0, amount: 1.0 }],
-                   orders);
+        assert_eq!(
+            vec![
+                Order {
+                    price: 0.0,
+                    amount: 1.0
+                },
+                Order {
+                    price: 1.0,
+                    amount: 2.0
+                },
+                Order {
+                    price: 2.0,
+                    amount: 1.0
+                },
+                Order {
+                    price: 3.0,
+                    amount: 1.0
+                }
+            ],
+            orders
+        );
 
-        let mut orders = vec![Order { price: 0.0, amount: 1.0 },
-                              Order { price: 1.0, amount: 2.0 },
-                              Order { price: 2.0, amount: 1.0 }];
-        let new_order = Order { price: 2.0, amount: 2.0 };
+        let mut orders = vec![
+            Order {
+                price: 0.0,
+                amount: 1.0,
+            },
+            Order {
+                price: 1.0,
+                amount: 2.0,
+            },
+            Order {
+                price: 2.0,
+                amount: 1.0,
+            },
+        ];
+        let new_order = Order {
+            price: 2.0,
+            amount: 2.0,
+        };
         add_to_ask_orders(&mut orders, new_order);
-        assert_eq!(vec![Order { price: 0.0, amount: 1.0 },
-                        Order { price: 1.0, amount: 2.0 },
-                        Order { price: 2.0, amount: 2.0 }],
-                   orders);
+        assert_eq!(
+            vec![
+                Order {
+                    price: 0.0,
+                    amount: 1.0
+                },
+                Order {
+                    price: 1.0,
+                    amount: 2.0
+                },
+                Order {
+                    price: 2.0,
+                    amount: 2.0
+                }
+            ],
+            orders
+        );
 
-        let mut orders = vec![Order { price: 0.0, amount: 1.0 },
-                              Order { price: 1.0, amount: 2.0 },
-                              Order { price: 2.0, amount: 1.0 },
-                              Order { price: 3.0, amount: 1.0 }];
-        let new_order = Order { price: 2.0, amount: 0.0 };
+        let mut orders = vec![
+            Order {
+                price: 0.0,
+                amount: 1.0,
+            },
+            Order {
+                price: 1.0,
+                amount: 2.0,
+            },
+            Order {
+                price: 2.0,
+                amount: 1.0,
+            },
+            Order {
+                price: 3.0,
+                amount: 1.0,
+            },
+        ];
+        let new_order = Order {
+            price: 2.0,
+            amount: 0.0,
+        };
         add_to_ask_orders(&mut orders, new_order);
-        assert_eq!(vec![Order { price: 0.0, amount: 1.0 },
-                        Order { price: 1.0, amount: 2.0 },
-                        Order { price: 3.0, amount: 1.0 }],
-                   orders);
+        assert_eq!(
+            vec![
+                Order {
+                    price: 0.0,
+                    amount: 1.0
+                },
+                Order {
+                    price: 1.0,
+                    amount: 2.0
+                },
+                Order {
+                    price: 3.0,
+                    amount: 1.0
+                }
+            ],
+            orders
+        );
     }
 
     #[test]
     fn unit_test_add_to_bid_orders() {
-        let mut orders = vec![Order { price: 3.0, amount: 1.0 },
-                              Order { price: 1.0, amount: 2.0 },
-                              Order { price: 0.0, amount: 1.0 }];
-        let new_order = Order { price: 2.0, amount: 1.0 };
+        let mut orders = vec![
+            Order {
+                price: 3.0,
+                amount: 1.0,
+            },
+            Order {
+                price: 1.0,
+                amount: 2.0,
+            },
+            Order {
+                price: 0.0,
+                amount: 1.0,
+            },
+        ];
+        let new_order = Order {
+            price: 2.0,
+            amount: 1.0,
+        };
         add_to_bid_orders(&mut orders, new_order);
-        assert_eq!(vec![Order { price: 3.0, amount: 1.0 },
-                        Order { price: 2.0, amount: 1.0 },
-                        Order { price: 1.0, amount: 2.0 },
-                        Order { price: 0.0, amount: 1.0 }],
-                   orders);
+        assert_eq!(
+            vec![
+                Order {
+                    price: 3.0,
+                    amount: 1.0
+                },
+                Order {
+                    price: 2.0,
+                    amount: 1.0
+                },
+                Order {
+                    price: 1.0,
+                    amount: 2.0
+                },
+                Order {
+                    price: 0.0,
+                    amount: 1.0
+                }
+            ],
+            orders
+        );
     }
-
 }

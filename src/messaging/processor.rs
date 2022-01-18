@@ -1,6 +1,6 @@
 use crate::messaging::message::Msg;
-use async_trait::async_trait;
 use anyhow::Result;
+use async_trait::async_trait;
 use crossbeam::channel;
 
 pub struct PureProcessor<'a, T>

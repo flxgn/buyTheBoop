@@ -1,7 +1,7 @@
+use anyhow::Result;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::convert::TryInto;
-use anyhow::Result;
 
 pub type StatusCode = u16;
 pub type Url = String;
