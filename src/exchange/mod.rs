@@ -1,14 +1,30 @@
 pub mod okex;
+pub mod trade;
 
+use anyhow::Result;
+use async_trait::async_trait;
 use std::iter::Iterator;
 use uuid::Uuid;
-use async_trait::async_trait;
 
 #[async_trait]
 pub trait Exchange {
-    async fn event_stream<'a>(&'a self) -> Box<dyn Iterator<Item=ExchangeStreamEvent> + 'a>;
+    async fn event_stream<'a>(&'a self) -> Box<dyn Iterator<Item = ExchangeStreamEvent> + 'a>;
 
-    async fn place_market_order(&self, order: &mut MarketOrder) -> Result<(), ()>;
+    async fn place_market_order(&mut self, order: &MarketOrder) -> Result<()>;
+
+    async fn fetch_assets(&self) -> Result<Assets>;
+}
+
+#[derive(Debug, PartialEq, Clone, Default)]
+pub struct Asset {
+    pub name: String,
+    pub amount: f64,
+}
+
+#[derive(Debug, PartialEq, Clone, Default)]
+pub struct Assets {
+    pub fiat: Option<Asset>,
+    pub coin: Option<Asset>,
 }
 
 #[derive(Debug, Clone)]
@@ -37,13 +53,13 @@ pub struct Order {
     pub amount: f64,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub enum OrderType {
     Buy,
     Sell,
 }
 
-#[derive(Debug, Clone)]
+#[derive(PartialEq, Debug, Clone)]
 pub struct MarketOrder {
     pub bid_currency: String,
     pub ask_currency: String,
@@ -51,60 +67,93 @@ pub struct MarketOrder {
     pub amount: f64,
 }
 
+#[derive(Default)]
+pub struct MockExchange {
+    assets: Assets,
+    pub recorded_orders: Vec<MarketOrder>,
+}
+
+impl MockExchange {
+    pub fn new(assets: Assets) -> Self {
+        MockExchange {
+            assets,
+            ..Default::default()
+        }
+    }
+}
+
+#[async_trait]
+impl Exchange for MockExchange {
+    async fn event_stream<'a>(&'a self) -> Box<dyn Iterator<Item = ExchangeStreamEvent> + 'a> {
+        unimplemented!()
+    }
+
+    async fn place_market_order(&mut self, order: &MarketOrder) -> Result<()> {
+        self.recorded_orders.push(order.clone());
+        Ok(())
+    }
+
+    async fn fetch_assets(&self) -> Result<Assets> {
+        Ok(self.assets.clone())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::vec::Vec;
+    use pretty_assertions::assert_eq;
 
-    struct TestExchange {
-        test_event_stream: Vec<ExchangeStreamEvent>
+    #[async_std::test]
+    async fn mock_should_fetch_provided_assets() {
+        let given_assets = Assets {
+            fiat: Some(Asset {
+                name: "USD".into(),
+                amount: 50.0,
+            }),
+            coin: None,
+        };
+        let exchange = MockExchange::new(given_assets.clone());
+        let actual = exchange.fetch_assets().await.unwrap();
+        assert_eq!(given_assets, actual)
     }
 
-    #[async_trait]
-    impl Exchange for TestExchange {
-        async fn event_stream<'a>(&'a self) -> Box<dyn Iterator<Item=ExchangeStreamEvent> + 'a> {
-            let event_stream = self.test_event_stream.iter().cloned();
-            Box::new(event_stream)
-        }
-
-        async fn place_market_order(&self, _order: &mut MarketOrder) -> Result<(), ()> {
-            Result::Ok(())
-        }
+    #[async_std::test]
+    async fn mock_should_fetch_different_assets() {
+        let given_assets = Assets {
+            fiat: None,
+            coin: Some(Asset {
+                name: "BTW".into(),
+                amount: 0.01,
+            }),
+        }; 
+        let exchange = MockExchange::new(given_assets.clone());
+        let actual = exchange.fetch_assets().await.unwrap();
+        assert_eq!(given_assets, actual)
     }
 
-    async fn consume_event_stream<T>(exchange: &T)
-        where T: Exchange
-    {
-        for event in exchange.event_stream().await {
-            match event {
-                ExchangeStreamEvent::Subscription(s) => println!("{:#?}", s),
-                ExchangeStreamEvent::Pair(p) => println!("{:#?}", p),
-            }
-        }
+    #[async_std::test]
+    async fn mock_should_record_placed_marked_orders() {
+        let mut exchange = MockExchange::new(Assets {..Default::default()});
+        let expected_order = MarketOrder {
+            bid_currency: "EUR".into(),
+            ask_currency: "BTC".into(),
+            amount: 50.0,
+            order_type: OrderType::Buy,
+        };
+        exchange.place_market_order(&expected_order).await.unwrap();
+        assert_eq!(vec![expected_order], exchange.recorded_orders)
     }
 
-    #[test]
-    fn test_consume_event_stream() {
-        let s1 = Subscription {
-            id: Uuid::new_v3(&Uuid::NAMESPACE_OID, "1".as_bytes()),
-            bid_currency: String::from("ETH"),
-            ask_currency: String::from("EUR"),
+    #[async_std::test]
+    async fn mock_should_record_different_placed_marked_orders() {
+        let mut exchange = MockExchange::new(Assets {..Default::default()});
+        let expected_order = MarketOrder {
+            bid_currency: "BTC".into(),
+            ask_currency: "EUR".into(),
+            amount: 40.0,
+            order_type: OrderType::Sell,
         };
-        let s2 = Subscription {
-            id: Uuid::new_v3(&Uuid::NAMESPACE_OID, "2".as_bytes()),
-            bid_currency: String::from("ETH"),
-            ask_currency: String::from("BTC"),
-        };
-        let s3 = Subscription {
-            id: Uuid::new_v3(&Uuid::NAMESPACE_OID, "3".as_bytes()),
-            bid_currency: String::from("BTC"),
-            ask_currency: String::from("EUR"),
-        };
-        let event_1 = ExchangeStreamEvent::Subscription(s1);
-        let event_2 = ExchangeStreamEvent::Subscription(s2);
-        let event_3 = ExchangeStreamEvent::Subscription(s3);
-        let test_exchange = TestExchange { test_event_stream: vec![event_1, event_2, event_3] };
-        consume_event_stream(&test_exchange);
-        assert_eq!(1, 1)
+        exchange.place_market_order(&expected_order).await.unwrap();
+        assert_eq!(vec![expected_order], exchange.recorded_orders)
     }
 }

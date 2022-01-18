@@ -33,11 +33,11 @@ pub struct Request {
 }
 
 #[async_trait]
-trait HttpClient {
+pub trait HttpClient {
     async fn send(self, request: Request) -> Result<Response>;
 }
 
-struct MockClient {
+pub struct MockClient {
     responses: HashMap<(Method, Url), Response>,
 }
 

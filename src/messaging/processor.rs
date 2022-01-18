@@ -1,7 +1,9 @@
 use crate::messaging::message::Msg;
+use async_trait::async_trait;
+use anyhow::Result;
 use crossbeam::channel;
 
-pub struct Processor<'a, T>
+pub struct PureProcessor<'a, T>
 where
     T: Aggregator<'a>,
 {
@@ -11,7 +13,7 @@ where
     pub aggregator: T,
 }
 
-impl<'a, T> Processor<'a, T>
+impl<'a, T> PureProcessor<'a, T>
 where
     T: Aggregator<'a>,
 {
@@ -36,6 +38,37 @@ pub trait Aggregator<'a> {
     fn aggregate(&mut self, msg: &Msg<'a>) -> Vec<Msg<'a>>;
 }
 
+pub struct EffectProcessor<'a, T>
+where
+    T: Executor<'a>,
+{
+    pub input: channel::Receiver<Msg<'a>>,
+    pub output: channel::Sender<Msg<'a>>,
+    pub executor: T,
+}
+
+impl<'a, T> EffectProcessor<'a, T>
+where
+    T: Executor<'a>,
+{
+    pub async fn start(mut self) -> Result<()> {
+        loop {
+            let e = self.input.recv().expect("open channel");
+            match &e {
+                Msg::Shutdown => break,
+                msg => self.executor.execute(msg).await?,
+            };
+            self.output.send(e).expect("open channel");
+        }
+        Ok(())
+    }
+}
+
+#[async_trait]
+pub trait Executor<'a> {
+    async fn execute(&mut self, msg: &Msg<'a>) -> Result<()>;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -47,28 +80,23 @@ mod tests {
 
     impl<'a> Aggregator<'a> for MockAggregator {
         fn aggregate(&mut self, msg: &Msg<'a>) -> Vec<Msg<'a>> {
-            match msg {
-                Msg::LivePriceUpdated(_) => {
-                    return vec![Msg::AveragePriceUpdated(PriceUpdated {
-                        ..Default::default()
-                    })];
-                }
-                _ => return vec![],
-            }
+            vec![Msg::AveragePriceUpdated(PriceUpdated {
+                ..Default::default()
+            })]
         }
     }
 
     fn new_processor<'a>(
         is_filter: bool,
     ) -> (
-        Processor<'a, MockAggregator>,
+        PureProcessor<'a, MockAggregator>,
         channel::Sender<Msg<'a>>,
         channel::Receiver<Msg<'a>>,
     ) {
         let (in_s, in_r) = unbounded();
         let (out_s, out_r) = unbounded();
         (
-            Processor {
+            PureProcessor {
                 input: in_r,
                 output: out_s,
                 is_filter,

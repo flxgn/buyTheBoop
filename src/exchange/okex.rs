@@ -6,7 +6,7 @@ use websocket::client::sync::Client;
 use websocket::stream::sync::NetworkStream;
 use websocket::{ClientBuilder, Message};
 use serde::{Deserialize, Serialize};
-use crate::exchange::{Exchange, ExchangeStreamEvent, Subscription, Pair, MarketOrder, OrderType, Order};
+use crate::exchange::{Exchange, ExchangeStreamEvent, Subscription, Pair, MarketOrder, OrderType, Order, Assets};
 use serde_json::Value;
 use uuid::Uuid;
 use std::collections::HashMap;
@@ -19,6 +19,8 @@ use chrono::prelude::{Utc, SecondsFormat};
 use hmac::{Hmac, Mac};
 use std::{env, thread};
 use async_trait::async_trait;
+use anyhow::{Result, anyhow};
+use crate::tools::networking::HttpClient;
 
 lazy_static! {
     static ref API_KEY: String = env::var("OKEX_API_KEY").unwrap();
@@ -35,7 +37,7 @@ pub struct Okex {
 }
 
 impl Okex {
-    pub async fn new() -> Okex {
+    pub async fn new<C>(client: C) -> Okex where C: HttpClient {
         Okex {
             size_increments: create_size_increments_map().await,
         }
@@ -72,19 +74,6 @@ struct PairDetail {
     tick_size: String,
 }
 
-#[cfg(test)]
-mod okex_tests {
-    use super::*;
-
-    #[test]
-    fn calculate_size_increment_test() {
-        assert_eq!(3, calculate_size_increment(&String::from("0.001")));
-        assert_eq!(0, calculate_size_increment(&String::from("1")));
-        assert_eq!(0, calculate_size_increment(&String::from("10")));
-        assert_eq!(2, calculate_size_increment(&String::from("0.01")));
-    }
-}
-
 fn websocket_worker(mut client: Client<Box<dyn NetworkStream + Send>>,
                     message: String,
                     sender: Sender<Result<OwnedMessage, WebSocketError>>) {
@@ -98,6 +87,10 @@ fn websocket_worker(mut client: Client<Box<dyn NetworkStream + Send>>,
 
 #[async_trait]
 impl Exchange for Okex {
+    async fn fetch_assets(&self) -> Result<Assets> {
+        unimplemented!()
+    } 
+
     async fn event_stream<'a>(&'a self) -> Box<dyn Iterator<Item=ExchangeStreamEvent> + 'a> {
         let (sender, receiver) = unbounded();
         for (client, message) in client_pool().await {
@@ -110,7 +103,7 @@ impl Exchange for Okex {
         Box::new(iterator)
     }
 
-    async fn place_market_order(&self, order: &mut MarketOrder) -> Result<(), ()> {
+    async fn place_market_order(&mut self, order: &MarketOrder) -> Result<()> {
         let timestamp = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
         let method = "POST";
         let request_path = "/api/spot/v3/orders";
@@ -134,8 +127,6 @@ impl Exchange for Okex {
                 round::floor(order.amount, size_increment).to_string()
             }
         };
-
-        order.amount = rounded_amount.parse().unwrap();
 
         let mut body = HashMap::new();
         body.insert("type", "market");
@@ -167,8 +158,6 @@ impl Exchange for Okex {
         let mut complete_url = String::from("https://www.okex.com");
         complete_url.push_str(request_path);
 
-        info!("{:#?}", order);
-
 
         if MOCK_SENDING {
             match client
@@ -178,15 +167,11 @@ impl Exchange for Okex {
                 .build() {
                 Ok(res) => {
                     info!("{:#?}", res.body());
-                    if true {
-                        Result::Ok(())
-                    } else {
-                        Err(())
-                    }
+                    Result::Ok(())
                 }
                 Err(e) => {
                     info!("{:#?}", e);
-                    Err(())
+                    Err(e.into())
                 }
             }
         } else {
@@ -205,12 +190,12 @@ impl Exchange for Okex {
                     if success {
                         Result::Ok(())
                     } else {
-                        Err(())
+                        Err(anyhow!("Request unsuccessful"))
                     }
                 }
                 Err(e) => {
                     info!("{:#?}", e);
-                    Err(())
+                    Err(e.into())
                 }
             }
         }
@@ -410,6 +395,14 @@ mod tests {
     use crate::exchange::Order;
 
     #[test]
+    fn calculate_size_increment_test() {
+        assert_eq!(3, calculate_size_increment(&String::from("0.001")));
+        assert_eq!(0, calculate_size_increment(&String::from("1")));
+        assert_eq!(0, calculate_size_increment(&String::from("10")));
+        assert_eq!(2, calculate_size_increment(&String::from("0.01")));
+    }
+
+    #[test]
     fn unit_test_deserialize_instrument() {
         let input = r#"[{"instrument_id":"LTC-BTC"},
                         {"instrument_id":"LTC-BTC"}]"#;
@@ -479,4 +472,5 @@ mod tests {
                         Order { price: 0.0, amount: 1.0 }],
                    orders);
     }
+
 }
