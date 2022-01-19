@@ -13,10 +13,25 @@ pub struct PriceUpdated<'a> {
     pub price: Price,
 }
 
+#[derive(Debug, PartialEq, Copy, Clone)]
+pub enum OrderType {
+    Buy,
+    Sell,
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct MarketOrder {
+    pub bid_currency: String,
+    pub ask_currency: String,
+    pub order_type: OrderType,
+    pub amount: f64,
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum Msg<'a> {
     LivePriceUpdated(PriceUpdated<'a>),
     AveragePriceUpdated(PriceUpdated<'a>),
+    OrderExecuted(MarketOrder),
     Buy,
     Sell,
     Shutdown,

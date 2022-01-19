@@ -1,4 +1,4 @@
-use crate::messaging::{message::Msg, processor::Actor};
+use crate::messaging::{message, message::Msg, processor::Actor};
 use anyhow::Result;
 use async_trait::async_trait;
 
@@ -25,19 +25,16 @@ where
 impl<'a, E> Actor<'a> for Trader<'a, E>
 where
     E: Exchange + Send + Sync,
-{   
-    //TODO: Should probably also create Events (Bought(MarketOrder), Sold(MarketOrder))
+{
     async fn act(&mut self, msg: &Msg<'a>) -> Result<Vec<Msg<'a>>> {
         let res = match msg {
             Msg::Buy => {
                 let assets = self.exchange.fetch_assets().await?;
-                do_execute(self.exchange, assets.fiat, OrderType::Buy).await?;
-                vec![]
+                execute(self.exchange, assets.fiat, OrderType::Buy).await?
             }
             Msg::Sell => {
                 let assets = self.exchange.fetch_assets().await?;
-                do_execute(self.exchange, assets.coin, OrderType::Sell).await?;
-                vec![]
+                execute(self.exchange, assets.coin, OrderType::Sell).await?
             }
             _ => vec![],
         };
@@ -45,28 +42,35 @@ where
     }
 }
 
-async fn do_execute<'a, E>(
+async fn execute<'a, 'b, E>(
     exchange: &'a mut E,
     asset: Option<Asset>,
     order_type: OrderType,
-) -> Result<()>
+) -> Result<Vec<Msg<'b>>>
 where
     E: Exchange,
 {
     if let Some(asset) = asset {
         if asset.amount > 0.0 {
-            let result = exchange
-                .place_market_order(&MarketOrder {
-                    bid_currency: "EUR".into(),
-                    ask_currency: "BTC".into(),
-                    amount: asset.amount,
-                    order_type,
-                })
-                .await;
-            return result;
+            let order = MarketOrder {
+                bid_currency: "EUR".into(),
+                ask_currency: "BTC".into(),
+                amount: asset.amount,
+                order_type,
+            };
+            exchange.place_market_order(&order).await?;
+            return Ok(vec![Msg::OrderExecuted(message::MarketOrder {
+                amount: order.amount,
+                ask_currency: order.ask_currency,
+                bid_currency: order.bid_currency,
+                order_type: match order.order_type {
+                    OrderType::Buy => message::OrderType::Buy,
+                    OrderType::Sell => message::OrderType::Sell,
+                },
+            })])
         }
     }
-    Ok(())
+    Ok(vec![])
 }
 
 #[cfg(test)]
@@ -87,7 +91,9 @@ mod tests {
             coin: None,
         });
         let mut trader = Trader::new(&mut exchange);
+
         trader.act(&Msg::Buy).await.unwrap();
+
         let expected = vec![MarketOrder {
             bid_currency: "EUR".into(),
             ask_currency: "BTC".into(),
@@ -108,7 +114,9 @@ mod tests {
             coin: None,
         });
         let mut trader = Trader::new(&mut exchange);
+
         trader.act(&Msg::Buy).await.unwrap();
+
         let expected = vec![MarketOrder {
             bid_currency: "EUR".into(),
             ask_currency: "BTC".into(),
@@ -125,7 +133,9 @@ mod tests {
             ..Default::default()
         });
         let mut trader = Trader::new(&mut exchange);
+
         trader.act(&Msg::Buy).await.unwrap();
+
         let expected: Vec<MarketOrder> = vec![];
         let actual = exchange.recorded_orders;
         assert_eq!(expected, actual)
@@ -141,9 +151,33 @@ mod tests {
             coin: None,
         });
         let mut trader = Trader::new(&mut exchange);
+
         trader.act(&Msg::Buy).await.unwrap();
+
         let expected: Vec<MarketOrder> = vec![];
         let actual = exchange.recorded_orders;
+        assert_eq!(expected, actual)
+    }
+
+    #[async_std::test]
+    async fn should_create_buy_order_executed_event() {
+        let mut exchange = MockExchange::new(Assets {
+            fiat: Some(Asset {
+                amount: 50.0,
+                name: "EUR".into(),
+            }),
+            coin: None,
+        });
+        let mut trader = Trader::new(&mut exchange);
+
+        let actual = trader.act(&Msg::Buy).await.unwrap();
+
+        let expected = vec![Msg::OrderExecuted(message::MarketOrder {
+            bid_currency: "EUR".into(),
+            ask_currency: "BTC".into(),
+            amount: 50.0,
+            order_type: message::OrderType::Buy,
+        })];
         assert_eq!(expected, actual)
     }
 
@@ -157,7 +191,9 @@ mod tests {
             }),
         });
         let mut trader = Trader::new(&mut exchange);
+
         trader.act(&Msg::Sell).await.unwrap();
+
         let expected = vec![MarketOrder {
             bid_currency: "EUR".into(),
             ask_currency: "BTC".into(),
@@ -178,7 +214,9 @@ mod tests {
             }),
         });
         let mut trader = Trader::new(&mut exchange);
+
         trader.act(&Msg::Sell).await.unwrap();
+
         let expected = vec![MarketOrder {
             bid_currency: "EUR".into(),
             ask_currency: "BTC".into(),
@@ -195,7 +233,9 @@ mod tests {
             ..Default::default()
         });
         let mut trader = Trader::new(&mut exchange);
+
         trader.act(&Msg::Sell).await.unwrap();
+
         let expected: Vec<MarketOrder> = vec![];
         let actual = exchange.recorded_orders;
         assert_eq!(expected, actual)
@@ -211,9 +251,33 @@ mod tests {
             }),
         });
         let mut trader = Trader::new(&mut exchange);
+
         trader.act(&Msg::Sell).await.unwrap();
+
         let expected: Vec<MarketOrder> = vec![];
         let actual = exchange.recorded_orders;
+        assert_eq!(expected, actual)
+    }
+
+    #[async_std::test]
+    async fn should_create_sell_order_executed_event() {
+        let mut exchange = MockExchange::new(Assets {
+            fiat: None,
+            coin: Some(Asset {
+                amount: 0.0000001,
+                name: "BTC".into(),
+            }),
+        });
+        let mut trader = Trader::new(&mut exchange);
+
+        let actual = trader.act(&Msg::Sell).await.unwrap();
+
+        let expected = vec![Msg::OrderExecuted(message::MarketOrder {
+            bid_currency: "EUR".into(),
+            ask_currency: "BTC".into(),
+            amount: 0.0000001,
+            order_type: message::OrderType::Sell,
+        })];
         assert_eq!(expected, actual)
     }
 }
