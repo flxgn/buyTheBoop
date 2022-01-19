@@ -1,5 +1,5 @@
 use crate::messaging::message::{Msg, PriceUpdated};
-use crate::messaging::processor::Aggregator;
+use crate::messaging::processor::Actor;
 use anyhow::Result;
 use async_trait::async_trait;
 
@@ -28,8 +28,8 @@ impl SlidingAverage {
 }
 
 #[async_trait]
-impl<'a> Aggregator<'a> for SlidingAverage {
-    async fn aggregate(&mut self, msg: &Msg<'a>) -> Result<Vec<Msg<'a>>> {
+impl<'a> Actor<'a> for SlidingAverage {
+    async fn act(&mut self, msg: &Msg<'a>) -> Result<Vec<Msg<'a>>> {
         let res = match msg {
             Msg::LivePriceUpdated(e) => {
                 self.events.push(TimePricePoint {
@@ -65,8 +65,8 @@ mod tests {
     const SECOND: i64 = 1_000;
 
     #[async_std::test]
-    async fn aggr_should_emit_average_price_update() {
-        let mut aggregator = SlidingAverage::new(SECOND);
+    async fn actor_should_emit_average_price_update() {
+        let mut actor = SlidingAverage::new(SECOND);
         let e1 = Msg::LivePriceUpdated(PriceUpdated {
             pair_id: "pair_id",
             datetime: 0,
@@ -79,8 +79,8 @@ mod tests {
             price: 2.0,
             ..Default::default()
         });
-        aggregator.aggregate(&e1).await.unwrap();
-        let actual_e = aggregator.aggregate(&e2).await.unwrap();
+        actor.act(&e1).await.unwrap();
+        let actual_e = actor.act(&e2).await.unwrap();
         let expected_e = vec![Msg::AveragePriceUpdated(PriceUpdated {
             pair_id: "pair_id",
             datetime: SECOND,
@@ -91,8 +91,8 @@ mod tests {
     }
 
     #[async_std::test]
-    async fn aggr_should_calculate_prices_from_given_sliding_window() {
-        let mut aggregator = SlidingAverage::new(SECOND);
+    async fn actor_should_calculate_prices_from_given_sliding_window() {
+        let mut actor = SlidingAverage::new(SECOND);
         let e1 = Msg::LivePriceUpdated(PriceUpdated {
             datetime: 0,
             price: 1.0,
@@ -108,9 +108,9 @@ mod tests {
             price: 3.0,
             ..Default::default()
         });
-        aggregator.aggregate(&e1).await.unwrap();
-        let actual_e1 = aggregator.aggregate(&e2).await.unwrap();
-        let actual_e2 = aggregator.aggregate(&e3).await.unwrap();
+        actor.act(&e1).await.unwrap();
+        let actual_e1 = actor.act(&e2).await.unwrap();
+        let actual_e2 = actor.act(&e3).await.unwrap();
 
         let expected_e1 = vec![Msg::AveragePriceUpdated(PriceUpdated {
             datetime: SECOND,

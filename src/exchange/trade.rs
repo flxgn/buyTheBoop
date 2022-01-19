@@ -1,4 +1,4 @@
-use crate::messaging::{message::Msg, processor::Executor};
+use crate::messaging::{message::Msg, processor::Actor};
 use anyhow::Result;
 use async_trait::async_trait;
 
@@ -22,23 +22,26 @@ where
 }
 
 #[async_trait]
-impl<'a, E> Executor<'a> for Trader<'a, E>
+impl<'a, E> Actor<'a> for Trader<'a, E>
 where
     E: Exchange + Send + Sync,
 {   
     //TODO: Should probably also create Events (Bought(MarketOrder), Sold(MarketOrder))
-    async fn execute(&mut self, msg: &Msg<'a>) -> Result<()> {
-        match msg {
+    async fn act(&mut self, msg: &Msg<'a>) -> Result<Vec<Msg<'a>>> {
+        let res = match msg {
             Msg::Buy => {
                 let assets = self.exchange.fetch_assets().await?;
-                do_execute(self.exchange, assets.fiat, OrderType::Buy).await
+                do_execute(self.exchange, assets.fiat, OrderType::Buy).await?;
+                vec![]
             }
             Msg::Sell => {
                 let assets = self.exchange.fetch_assets().await?;
-                do_execute(self.exchange, assets.coin, OrderType::Sell).await
+                do_execute(self.exchange, assets.coin, OrderType::Sell).await?;
+                vec![]
             }
-            _ => Ok(()),
-        }
+            _ => vec![],
+        };
+        Ok(res)
     }
 }
 
@@ -84,7 +87,7 @@ mod tests {
             coin: None,
         });
         let mut trader = Trader::new(&mut exchange);
-        trader.execute(&Msg::Buy).await.unwrap();
+        trader.act(&Msg::Buy).await.unwrap();
         let expected = vec![MarketOrder {
             bid_currency: "EUR".into(),
             ask_currency: "BTC".into(),
@@ -105,7 +108,7 @@ mod tests {
             coin: None,
         });
         let mut trader = Trader::new(&mut exchange);
-        trader.execute(&Msg::Buy).await.unwrap();
+        trader.act(&Msg::Buy).await.unwrap();
         let expected = vec![MarketOrder {
             bid_currency: "EUR".into(),
             ask_currency: "BTC".into(),
@@ -122,7 +125,7 @@ mod tests {
             ..Default::default()
         });
         let mut trader = Trader::new(&mut exchange);
-        trader.execute(&Msg::Buy).await.unwrap();
+        trader.act(&Msg::Buy).await.unwrap();
         let expected: Vec<MarketOrder> = vec![];
         let actual = exchange.recorded_orders;
         assert_eq!(expected, actual)
@@ -138,7 +141,7 @@ mod tests {
             coin: None,
         });
         let mut trader = Trader::new(&mut exchange);
-        trader.execute(&Msg::Buy).await.unwrap();
+        trader.act(&Msg::Buy).await.unwrap();
         let expected: Vec<MarketOrder> = vec![];
         let actual = exchange.recorded_orders;
         assert_eq!(expected, actual)
@@ -154,7 +157,7 @@ mod tests {
             }),
         });
         let mut trader = Trader::new(&mut exchange);
-        trader.execute(&Msg::Sell).await.unwrap();
+        trader.act(&Msg::Sell).await.unwrap();
         let expected = vec![MarketOrder {
             bid_currency: "EUR".into(),
             ask_currency: "BTC".into(),
@@ -175,7 +178,7 @@ mod tests {
             }),
         });
         let mut trader = Trader::new(&mut exchange);
-        trader.execute(&Msg::Sell).await.unwrap();
+        trader.act(&Msg::Sell).await.unwrap();
         let expected = vec![MarketOrder {
             bid_currency: "EUR".into(),
             ask_currency: "BTC".into(),
@@ -192,7 +195,7 @@ mod tests {
             ..Default::default()
         });
         let mut trader = Trader::new(&mut exchange);
-        trader.execute(&Msg::Sell).await.unwrap();
+        trader.act(&Msg::Sell).await.unwrap();
         let expected: Vec<MarketOrder> = vec![];
         let actual = exchange.recorded_orders;
         assert_eq!(expected, actual)
@@ -208,7 +211,7 @@ mod tests {
             }),
         });
         let mut trader = Trader::new(&mut exchange);
-        trader.execute(&Msg::Sell).await.unwrap();
+        trader.act(&Msg::Sell).await.unwrap();
         let expected: Vec<MarketOrder> = vec![];
         let actual = exchange.recorded_orders;
         assert_eq!(expected, actual)

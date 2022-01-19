@@ -3,26 +3,26 @@ use anyhow::Result;
 use async_trait::async_trait;
 use crossbeam::channel;
 
-pub struct PureProcessor<'a, T>
+pub struct Processor<'a, T>
 where
-    T: Aggregator<'a>,
+    T: Actor<'a>,
 {
     pub input: channel::Receiver<Msg<'a>>,
     pub output: channel::Sender<Msg<'a>>,
     pub is_filter: bool,
-    pub aggregator: T,
+    pub actor: T,
 }
 
-impl<'a, T> PureProcessor<'a, T>
+impl<'a, T> Processor<'a, T>
 where
-    T: Aggregator<'a>,
+    T: Actor<'a>,
 {
     pub async fn start(mut self) -> Result<()> {
         loop {
             let e = self.input.recv().expect("open channel");
             let mut msgs = match &e {
                 Msg::Shutdown => break,
-                msg => self.aggregator.aggregate(msg).await?,
+                msg => self.actor.act(msg).await?,
             };
             if !self.is_filter {
                 msgs.insert(0, e)
@@ -36,39 +36,8 @@ where
 }
 
 #[async_trait]
-pub trait Aggregator<'a> {
-    async fn aggregate(&mut self, msg: &Msg<'a>) -> Result<Vec<Msg<'a>>>;
-}
-
-pub struct EffectProcessor<'a, T>
-where
-    T: Executor<'a>,
-{
-    pub input: channel::Receiver<Msg<'a>>,
-    pub output: channel::Sender<Msg<'a>>,
-    pub executor: T,
-}
-
-impl<'a, T> EffectProcessor<'a, T>
-where
-    T: Executor<'a>,
-{
-    pub async fn start(mut self) -> Result<()> {
-        loop {
-            let e = self.input.recv().expect("open channel");
-            match &e {
-                Msg::Shutdown => break,
-                msg => self.executor.execute(msg).await?,
-            };
-            self.output.send(e).expect("open channel");
-        }
-        Ok(())
-    }
-}
-
-#[async_trait]
-pub trait Executor<'a> {
-    async fn execute(&mut self, msg: &Msg<'a>) -> Result<()>;
+pub trait Actor<'a> {
+    async fn act(&mut self, msg: &Msg<'a>) -> Result<Vec<Msg<'a>>>;
 }
 
 #[cfg(test)]
@@ -78,11 +47,11 @@ mod tests {
     use crossbeam::channel::unbounded;
     use pretty_assertions::assert_eq;
 
-    pub struct MockAggregator {}
+    pub struct MockActor {}
 
     #[async_trait]
-    impl<'a> Aggregator<'a> for MockAggregator {
-        async fn aggregate(&mut self, msg: &Msg<'a>) -> Result<Vec<Msg<'a>>> {
+    impl<'a> Actor<'a> for MockActor {
+        async fn act(&mut self, msg: &Msg<'a>) -> Result<Vec<Msg<'a>>> {
             Ok(vec![Msg::AveragePriceUpdated(PriceUpdated {
                 ..Default::default()
             })])
@@ -92,18 +61,18 @@ mod tests {
     fn new_processor<'a>(
         is_filter: bool,
     ) -> (
-        PureProcessor<'a, MockAggregator>,
+        Processor<'a, MockActor>,
         channel::Sender<Msg<'a>>,
         channel::Receiver<Msg<'a>>,
     ) {
         let (in_s, in_r) = unbounded();
         let (out_s, out_r) = unbounded();
         (
-            PureProcessor {
+            Processor {
                 input: in_r,
                 output: out_s,
                 is_filter,
-                aggregator: MockAggregator {},
+                actor: MockActor {},
             },
             in_s,
             out_r,

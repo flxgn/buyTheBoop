@@ -1,5 +1,5 @@
 use crate::messaging::message::{Msg, Price};
-use crate::messaging::processor::Aggregator;
+use crate::messaging::processor::Actor;
 use async_trait::async_trait;
 use anyhow::Result;
 
@@ -18,8 +18,8 @@ impl SimpleCrossover {
 }
 
 #[async_trait]
-impl<'a> Aggregator<'a> for SimpleCrossover {
-    async fn aggregate(&mut self, msg: &Msg<'a>) -> Result<Vec<Msg<'a>>> {
+impl<'a> Actor<'a> for SimpleCrossover {
+    async fn act(&mut self, msg: &Msg<'a>) -> Result<Vec<Msg<'a>>> {
         let res = match msg {
             Msg::LivePriceUpdated(e) => {
                 let result = self
@@ -58,7 +58,7 @@ mod tests {
     const SECOND: i64 = 1_000;
 
     #[async_std::test]
-    async fn aggr_should_emit_nothing_if_only_average_price_updated() {
+    async fn actor_should_emit_nothing_if_only_average_price_updated() {
         let mut aggr = SimpleCrossover::new();
         let msg = Msg::AveragePriceUpdated(PriceUpdated {
             pair_id: "pair_id",
@@ -66,13 +66,13 @@ mod tests {
             price: 1.0,
             ..Default::default()
         });
-        let actual = aggr.aggregate(&msg).await.unwrap();
+        let actual = aggr.act(&msg).await.unwrap();
         let expected: Vec<Msg> = vec![];
         assert_eq!(expected, actual)
     }
 
     #[async_std::test]
-    async fn aggr_should_emit_nothing_if_only_live_price_updated() {
+    async fn actor_should_emit_nothing_if_only_live_price_updated() {
         let mut aggr = SimpleCrossover::new();
         let msg = Msg::LivePriceUpdated(PriceUpdated {
             pair_id: "pair_id",
@@ -80,13 +80,13 @@ mod tests {
             price: 1.0,
             ..Default::default()
         });
-        let actual = aggr.aggregate(&msg).await.unwrap();
+        let actual = aggr.act(&msg).await.unwrap();
         let expected: Vec<Msg> = vec![];
         assert_eq!(expected, actual)
     }
 
     #[async_std::test]
-    async fn aggr_should_emit_buy_msg_if_live_price_crosses_average_upwards() {
+    async fn actor_should_emit_buy_msg_if_live_price_crosses_average_upwards() {
         let mut aggr = SimpleCrossover::new();
         let average_updated = Msg::AveragePriceUpdated(PriceUpdated {
             pair_id: "pair_id",
@@ -106,15 +106,15 @@ mod tests {
             price: 1.1,
             ..Default::default()
         });
-        aggr.aggregate(&average_updated).await.unwrap();
-        aggr.aggregate(&live_updated_1).await.unwrap();
-        let actual = aggr.aggregate(&live_updated_2).await.unwrap();
+        aggr.act(&average_updated).await.unwrap();
+        aggr.act(&live_updated_1).await.unwrap();
+        let actual = aggr.act(&live_updated_2).await.unwrap();
         let expected: Vec<Msg> = vec![Msg::Buy];
         assert_eq!(expected, actual)
     }
 
     #[async_std::test]
-    async fn aggr_should_emit_nothing_if_live_price_stays_above_average() {
+    async fn actor_should_emit_nothing_if_live_price_stays_above_average() {
         let mut aggr = SimpleCrossover::new();
         let average_updated = Msg::AveragePriceUpdated(PriceUpdated {
             pair_id: "pair_id",
@@ -134,15 +134,15 @@ mod tests {
             price: 1.2,
             ..Default::default()
         });
-        aggr.aggregate(&average_updated).await.unwrap();
-        aggr.aggregate(&live_updated_1).await.unwrap();
-        let actual = aggr.aggregate(&live_updated_2).await.unwrap();
+        aggr.act(&average_updated).await.unwrap();
+        aggr.act(&live_updated_1).await.unwrap();
+        let actual = aggr.act(&live_updated_2).await.unwrap();
         let expected: Vec<Msg> = vec![];
         assert_eq!(expected, actual)
     }
 
     #[async_std::test]
-    async fn aggr_should_emit_sell_msg_if_live_price_crosses_average_downwards() {
+    async fn actor_should_emit_sell_msg_if_live_price_crosses_average_downwards() {
         let mut aggr = SimpleCrossover::new();
         let average_updated = Msg::AveragePriceUpdated(PriceUpdated {
             pair_id: "pair_id",
@@ -162,15 +162,15 @@ mod tests {
             price: 0.9,
             ..Default::default()
         });
-        aggr.aggregate(&average_updated).await.unwrap();
-        aggr.aggregate(&live_updated_1).await.unwrap();
-        let actual = aggr.aggregate(&live_updated_2).await.unwrap();
+        aggr.act(&average_updated).await.unwrap();
+        aggr.act(&live_updated_1).await.unwrap();
+        let actual = aggr.act(&live_updated_2).await.unwrap();
         let expected: Vec<Msg> = vec![Msg::Sell];
         assert_eq!(expected, actual)
     }
 
     #[async_std::test]
-    async fn aggr_should_emit_nothing_if_live_price_stays_below_average() {
+    async fn actor_should_emit_nothing_if_live_price_stays_below_average() {
         let mut aggr = SimpleCrossover::new();
         let average_updated = Msg::AveragePriceUpdated(PriceUpdated {
             pair_id: "pair_id",
@@ -190,9 +190,9 @@ mod tests {
             price: 0.1,
             ..Default::default()
         });
-        aggr.aggregate(&average_updated).await.unwrap();
-        aggr.aggregate(&live_updated_1).await.unwrap();
-        let actual = aggr.aggregate(&live_updated_2).await.unwrap();
+        aggr.act(&average_updated).await.unwrap();
+        aggr.act(&live_updated_1).await.unwrap();
+        let actual = aggr.act(&live_updated_2).await.unwrap();
         let expected: Vec<Msg> = vec![];
         assert_eq!(expected, actual)
     }
