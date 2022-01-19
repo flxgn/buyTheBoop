@@ -17,12 +17,12 @@ impl<'a, T> PureProcessor<'a, T>
 where
     T: Aggregator<'a>,
 {
-    pub fn start(mut self) {
+    pub async fn start(mut self) -> Result<()> {
         loop {
             let e = self.input.recv().expect("open channel");
             let mut msgs = match &e {
                 Msg::Shutdown => break,
-                msg => self.aggregator.aggregate(msg),
+                msg => self.aggregator.aggregate(msg).await?,
             };
             if !self.is_filter {
                 msgs.insert(0, e)
@@ -31,11 +31,13 @@ where
                 self.output.send(msg).expect("open channel")
             }
         }
+        Ok(())
     }
 }
 
+#[async_trait]
 pub trait Aggregator<'a> {
-    fn aggregate(&mut self, msg: &Msg<'a>) -> Vec<Msg<'a>>;
+    async fn aggregate(&mut self, msg: &Msg<'a>) -> Result<Vec<Msg<'a>>>;
 }
 
 pub struct EffectProcessor<'a, T>
@@ -78,11 +80,12 @@ mod tests {
 
     pub struct MockAggregator {}
 
+    #[async_trait]
     impl<'a> Aggregator<'a> for MockAggregator {
-        fn aggregate(&mut self, msg: &Msg<'a>) -> Vec<Msg<'a>> {
-            vec![Msg::AveragePriceUpdated(PriceUpdated {
+        async fn aggregate(&mut self, msg: &Msg<'a>) -> Result<Vec<Msg<'a>>> {
+            Ok(vec![Msg::AveragePriceUpdated(PriceUpdated {
                 ..Default::default()
-            })]
+            })])
         }
     }
 
@@ -107,23 +110,23 @@ mod tests {
         )
     }
 
-    #[test]
-    fn processor_should_exit_if_shutdown_received() {
+    #[async_std::test]
+    async fn processor_should_exit_if_shutdown_received() {
         let (processor, in_s, _) = new_processor(false);
         in_s.send(Msg::Shutdown).unwrap();
-        processor.start();
+        processor.start().await.unwrap();
         assert!(true);
     }
 
-    #[test]
-    fn processor_should_output_input_events_if_not_filtered() {
+    #[async_std::test]
+    async fn processor_should_output_input_events_if_not_filtered() {
         let (processor, in_s, out_r) = new_processor(false);
         let expected_msg = Msg::LivePriceUpdated(PriceUpdated {
             ..Default::default()
         });
         in_s.send(expected_msg.clone()).unwrap();
         in_s.send(Msg::Shutdown).unwrap();
-        processor.start();
+        processor.start().await.unwrap();
         let actual_msg_1 = out_r.recv().unwrap();
         assert_eq!(expected_msg, actual_msg_1);
 
@@ -134,15 +137,15 @@ mod tests {
         assert_eq!(expected_msg_2, actual_msg_2);
     }
 
-    #[test]
-    fn processor_should_not_output_input_events_if_filtered() {
+    #[async_std::test]
+    async fn processor_should_not_output_input_events_if_filtered() {
         let (processor, in_s, out_r) = new_processor(true);
         let msg = Msg::LivePriceUpdated(PriceUpdated {
             ..Default::default()
         });
         in_s.send(msg).unwrap();
         in_s.send(Msg::Shutdown).unwrap();
-        processor.start();
+        processor.start().await.unwrap();
         let expected_msg = Msg::AveragePriceUpdated(PriceUpdated {
             ..Default::default()
         });

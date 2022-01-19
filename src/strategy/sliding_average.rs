@@ -1,5 +1,7 @@
 use crate::messaging::message::{Msg, PriceUpdated};
 use crate::messaging::processor::Aggregator;
+use anyhow::Result;
+use async_trait::async_trait;
 
 pub type Timestamp = i64;
 pub type Price = f64;
@@ -25,9 +27,10 @@ impl SlidingAverage {
     }
 }
 
+#[async_trait]
 impl<'a> Aggregator<'a> for SlidingAverage {
-    fn aggregate(&mut self, msg: &Msg<'a>) -> Vec<Msg<'a>> {
-        match msg {
+    async fn aggregate(&mut self, msg: &Msg<'a>) -> Result<Vec<Msg<'a>>> {
+        let res = match msg {
             Msg::LivePriceUpdated(e) => {
                 self.events.push(TimePricePoint {
                     datetime: e.datetime,
@@ -43,13 +46,14 @@ impl<'a> Aggregator<'a> for SlidingAverage {
                     ..Default::default()
                 };
                 if self.events.len() > 1 {
-                    return vec![Msg::AveragePriceUpdated(avg)];
+                    vec![Msg::AveragePriceUpdated(avg)]
                 } else {
-                    return vec![];
+                    vec![]
                 }
             }
-            _ => return vec![],
-        }
+            _ => vec![],
+        };
+        Ok(res)
     }
 }
 
@@ -60,8 +64,8 @@ mod tests {
 
     const SECOND: i64 = 1_000;
 
-    #[test]
-    fn aggr_should_emit_average_price_update() {
+    #[async_std::test]
+    async fn aggr_should_emit_average_price_update() {
         let mut aggregator = SlidingAverage::new(SECOND);
         let e1 = Msg::LivePriceUpdated(PriceUpdated {
             pair_id: "pair_id",
@@ -75,8 +79,8 @@ mod tests {
             price: 2.0,
             ..Default::default()
         });
-        aggregator.aggregate(&e1);
-        let actual_e = aggregator.aggregate(&e2);
+        aggregator.aggregate(&e1).await.unwrap();
+        let actual_e = aggregator.aggregate(&e2).await.unwrap();
         let expected_e = vec![Msg::AveragePriceUpdated(PriceUpdated {
             pair_id: "pair_id",
             datetime: SECOND,
@@ -86,8 +90,8 @@ mod tests {
         assert_eq!(expected_e, actual_e)
     }
 
-    #[test]
-    fn aggr_should_calculate_prices_from_given_sliding_window() {
+    #[async_std::test]
+    async fn aggr_should_calculate_prices_from_given_sliding_window() {
         let mut aggregator = SlidingAverage::new(SECOND);
         let e1 = Msg::LivePriceUpdated(PriceUpdated {
             datetime: 0,
@@ -104,9 +108,9 @@ mod tests {
             price: 3.0,
             ..Default::default()
         });
-        aggregator.aggregate(&e1);
-        let actual_e1 = aggregator.aggregate(&e2);
-        let actual_e2 = aggregator.aggregate(&e3);
+        aggregator.aggregate(&e1).await.unwrap();
+        let actual_e1 = aggregator.aggregate(&e2).await.unwrap();
+        let actual_e2 = aggregator.aggregate(&e3).await.unwrap();
 
         let expected_e1 = vec![Msg::AveragePriceUpdated(PriceUpdated {
             datetime: SECOND,

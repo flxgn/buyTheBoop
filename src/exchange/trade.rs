@@ -25,7 +25,8 @@ where
 impl<'a, E> Executor<'a> for Trader<'a, E>
 where
     E: Exchange + Send + Sync,
-{
+{   
+    //TODO: Should probably also create Events (Bought(MarketOrder), Sold(MarketOrder))
     async fn execute(&mut self, msg: &Msg<'a>) -> Result<()> {
         match msg {
             Msg::Buy => {
@@ -72,6 +73,7 @@ mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
 
+    //TODO: Check if this really executes the right way (just switching buy and sell and keeping currencies the same)
     #[async_std::test]
     async fn should_buy_max_amount_if_fiat_exists() {
         let mut exchange = MockExchange::new(Assets {
