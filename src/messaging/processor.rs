@@ -3,19 +3,19 @@ use anyhow::Result;
 use async_trait::async_trait;
 use crossbeam::channel;
 
-pub struct Processor<'a, T>
+pub struct Processor<T>
 where
-    T: Actor<'a>,
+    T: Actor,
 {
-    pub input: channel::Receiver<Msg<'a>>,
-    pub output: channel::Sender<Msg<'a>>,
+    pub input: channel::Receiver<Msg>,
+    pub output: channel::Sender<Msg>,
     pub is_filter: bool,
     pub actor: T,
 }
 
-impl<'a, T> Processor<'a, T>
+impl<T> Processor<T>
 where
-    T: Actor<'a>,
+    T: Actor,
 {
     pub async fn start(mut self) -> Result<()> {
         loop {
@@ -36,8 +36,8 @@ where
 }
 
 #[async_trait]
-pub trait Actor<'a> {
-    async fn act(&mut self, msg: &Msg<'a>) -> Result<Vec<Msg<'a>>>;
+pub trait Actor {
+    async fn act(&mut self, msg: &Msg) -> Result<Vec<Msg>>;
 }
 
 #[cfg(test)]
@@ -50,20 +50,20 @@ mod tests {
     pub struct MockActor {}
 
     #[async_trait]
-    impl<'a> Actor<'a> for MockActor {
-        async fn act(&mut self, msg: &Msg<'a>) -> Result<Vec<Msg<'a>>> {
+    impl Actor for MockActor {
+        async fn act(&mut self, msg: &Msg) -> Result<Vec<Msg>> {
             Ok(vec![Msg::AveragePriceUpdated(PriceUpdated {
                 ..Default::default()
             })])
         }
     }
 
-    fn new_processor<'a>(
+    fn new_processor(
         is_filter: bool,
     ) -> (
-        Processor<'a, MockActor>,
-        channel::Sender<Msg<'a>>,
-        channel::Receiver<Msg<'a>>,
+        Processor<MockActor>,
+        channel::Sender<Msg>,
+        channel::Receiver<Msg>,
     ) {
         let (in_s, in_r) = unbounded();
         let (out_s, out_r) = unbounded();

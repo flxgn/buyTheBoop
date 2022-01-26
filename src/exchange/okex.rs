@@ -1,6 +1,7 @@
 use crate::exchange::{
     Assets, Exchange, ExchangeStreamEvent, MarketOrder, Order, OrderType, Pair, Subscription,
 };
+use crate::messaging::message::{Msg, PriceUpdated};
 use crate::tools::networking::HttpClient;
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
@@ -105,7 +106,7 @@ impl Exchange for Okex {
         unimplemented!()
     }
 
-    async fn event_stream<'a>(&'a self) -> Box<dyn Iterator<Item = ExchangeStreamEvent> + 'a> {
+    async fn event_stream(&self) -> Box<dyn Iterator<Item = Msg>> {
         let (sender, receiver) = unbounded();
         for (client, message) in client_pool().await {
             let cloned_sender = sender.clone();
@@ -113,10 +114,7 @@ impl Exchange for Okex {
                 websocket_worker(client, message, cloned_sender);
             });
         }
-        let iterator = EventStream {
-            receiver,
-            intermediate_pair_store: HashMap::new(),
-        };
+        let iterator = EventStream::new(receiver);
         Box::new(iterator)
     }
 
@@ -236,9 +234,18 @@ struct EventStream {
     intermediate_pair_store: HashMap<Uuid, Pair>,
 }
 
+impl EventStream {
+    fn new(receiver: Receiver<Result<OwnedMessage, WebSocketError>>) -> Self {
+        EventStream { 
+            receiver, 
+            intermediate_pair_store: HashMap::new(),
+         }
+    }
+}
+
 impl Iterator for EventStream {
-    type Item = ExchangeStreamEvent;
-    fn next(&mut self) -> Option<ExchangeStreamEvent> {
+    type Item = Msg;
+    fn next(&mut self) -> Option<Msg> {
         let msg: OwnedMessage = match self.receiver.recv().unwrap() {
             Ok(m) => m,
             Err(_e) => return None,
@@ -262,7 +269,8 @@ impl Iterator for EventStream {
                             bid_currency: String::from(bid_ask[0]),
                             ask_currency: String::from(bid_ask[1]),
                         };
-                        Some(ExchangeStreamEvent::Subscription(subscription))
+                        // TODO: Return real data
+                        Some(Msg::LivePriceUpdated(PriceUpdated{ ..Default::default() }))
                     } else {
                         println!("event");
                         None
@@ -284,7 +292,8 @@ impl Iterator for EventStream {
                             bid_orders,
                             ask_orders,
                         );
-                        Some(ExchangeStreamEvent::Pair(pair))
+                        // TODO: Return real data
+                        Some(Msg::LivePriceUpdated(PriceUpdated{ ..Default::default() }))
                     } else {
                         println!("table");
                         None

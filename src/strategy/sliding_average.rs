@@ -28,8 +28,8 @@ impl SlidingAverage {
 }
 
 #[async_trait]
-impl<'a> Actor<'a> for SlidingAverage {
-    async fn act(&mut self, msg: &Msg<'a>) -> Result<Vec<Msg<'a>>> {
+impl Actor for SlidingAverage {
+    async fn act(&mut self, msg: &Msg) -> Result<Vec<Msg>> {
         let res = match msg {
             Msg::LivePriceUpdated(e) => {
                 self.events.push(TimePricePoint {

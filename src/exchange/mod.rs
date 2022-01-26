@@ -1,6 +1,8 @@
 pub mod okex;
+pub mod simulation;
 pub mod trade;
 
+use crate::messaging::message::Msg;
 use anyhow::Result;
 use async_trait::async_trait;
 use std::iter::Iterator;
@@ -8,7 +10,7 @@ use uuid::Uuid;
 
 #[async_trait]
 pub trait Exchange {
-    async fn event_stream<'a>(&'a self) -> Box<dyn Iterator<Item = ExchangeStreamEvent> + 'a>;
+    async fn event_stream(&self) -> Box<dyn Iterator<Item = Msg>>;
 
     async fn place_market_order(&mut self, order: &MarketOrder) -> Result<()>;
 
@@ -84,7 +86,7 @@ impl MockExchange {
 
 #[async_trait]
 impl Exchange for MockExchange {
-    async fn event_stream<'a>(&'a self) -> Box<dyn Iterator<Item = ExchangeStreamEvent> + 'a> {
+    async fn event_stream(&self) -> Box<dyn Iterator<Item = Msg>> {
         unimplemented!()
     }
 

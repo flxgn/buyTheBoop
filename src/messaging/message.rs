@@ -2,13 +2,13 @@ use uuid::Uuid;
 
 pub type Timestamp = i64;
 pub type Price = f64;
-pub type PairId<'a> = &'a str;
+pub type PairId = &'static str;
 pub type EventId = Uuid;
 
 #[derive(Debug, PartialEq, Clone, Default)]
-pub struct PriceUpdated<'a> {
+pub struct PriceUpdated {
     pub id: EventId,
-    pub pair_id: PairId<'a>,
+    pub pair_id: PairId,
     pub datetime: Timestamp,
     pub price: Price,
 }
@@ -28,9 +28,9 @@ pub struct MarketOrder {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum Msg<'a> {
-    LivePriceUpdated(PriceUpdated<'a>),
-    AveragePriceUpdated(PriceUpdated<'a>),
+pub enum Msg {
+    LivePriceUpdated(PriceUpdated),
+    AveragePriceUpdated(PriceUpdated),
     OrderExecuted(MarketOrder),
     Buy,
     Sell,

@@ -22,11 +22,11 @@ where
 }
 
 #[async_trait]
-impl<'a, E> Actor<'a> for Trader<'a, E>
+impl<'a, E> Actor for Trader<'a, E>
 where
     E: Exchange + Send + Sync,
 {
-    async fn act(&mut self, msg: &Msg<'a>) -> Result<Vec<Msg<'a>>> {
+    async fn act(&mut self, msg: &Msg) -> Result<Vec<Msg>> {
         let res = match msg {
             Msg::Buy => {
                 let assets = self.exchange.fetch_assets().await?;
@@ -42,11 +42,11 @@ where
     }
 }
 
-async fn execute<'a, 'b, E>(
+async fn execute<'a, E>(
     exchange: &'a mut E,
     asset: Option<Asset>,
     order_type: OrderType,
-) -> Result<Vec<Msg<'b>>>
+) -> Result<Vec<Msg>>
 where
     E: Exchange,
 {
@@ -58,16 +58,17 @@ where
                 amount: asset.amount,
                 order_type,
             };
-            exchange.place_market_order(&order).await?;
-            return Ok(vec![Msg::OrderExecuted(message::MarketOrder {
-                amount: order.amount,
-                ask_currency: order.ask_currency,
-                bid_currency: order.bid_currency,
-                order_type: match order.order_type {
-                    OrderType::Buy => message::OrderType::Buy,
-                    OrderType::Sell => message::OrderType::Sell,
-                },
-            })])
+            return exchange.place_market_order(&order).await.map(|_| {
+                vec![Msg::OrderExecuted(message::MarketOrder {
+                    amount: order.amount,
+                    ask_currency: order.ask_currency,
+                    bid_currency: order.bid_currency,
+                    order_type: match order.order_type {
+                        OrderType::Buy => message::OrderType::Buy,
+                        OrderType::Sell => message::OrderType::Sell,
+                    },
+                })]
+            });
         }
     }
     Ok(vec![])
