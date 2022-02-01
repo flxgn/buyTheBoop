@@ -1,9 +1,9 @@
-use crate::messaging::message::{Msg, PriceUpdated};
+use crate::messaging::message::{Msg, MsgData, PriceUpdated};
 use crate::messaging::processor::Actor;
 use anyhow::Result;
 use async_trait::async_trait;
 
-pub type Timestamp = i64;
+pub type Timestamp = i128;
 pub type Price = f64;
 
 #[derive(Debug, PartialEq, Clone, Default)]
@@ -14,12 +14,12 @@ struct TimePricePoint {
 
 #[derive(Debug, PartialEq, Clone, Default)]
 pub struct SlidingAverage {
-    pub window_millis: i64,
+    pub window_millis: i128,
     events: Vec<TimePricePoint>,
 }
 
 impl SlidingAverage {
-    pub fn new(window_millis: i64) -> Self {
+    pub fn new(window_millis: i128) -> Self {
         SlidingAverage {
             window_millis,
             events: vec![],
@@ -29,15 +29,15 @@ impl SlidingAverage {
 
 #[async_trait]
 impl Actor for SlidingAverage {
-    async fn act(&mut self, msg: &Msg) -> Result<Vec<Msg>> {
-        let res = match msg {
-            Msg::LivePriceUpdated(e) => {
+    async fn act(&mut self, msg: &Msg) -> Result<Vec<MsgData>> {
+        let res = match &msg.data {
+            MsgData::LivePriceUpdated(e) => {
                 self.events.push(TimePricePoint {
                     datetime: e.datetime,
                     price: e.price,
                 });
                 self.events
-                    .retain(|i| i.datetime >= e.datetime - self.window_millis as i64);
+                    .retain(|i| i.datetime >= e.datetime - self.window_millis as i128);
                 let sum: f64 = self.events.iter().map(|e| e.price).sum();
                 let avg = PriceUpdated {
                     pair_id: e.pair_id,
@@ -46,7 +46,7 @@ impl Actor for SlidingAverage {
                     ..Default::default()
                 };
                 if self.events.len() > 1 {
-                    vec![Msg::AveragePriceUpdated(avg)]
+                    vec![MsgData::AveragePriceUpdated(avg)]
                 } else {
                     vec![]
                 }
@@ -62,26 +62,26 @@ mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
 
-    const SECOND: i64 = 1_000;
+    const SECOND: i128 = 1_000;
 
     #[async_std::test]
     async fn actor_should_emit_average_price_update() {
         let mut actor = SlidingAverage::new(SECOND);
-        let e1 = Msg::LivePriceUpdated(PriceUpdated {
+        let e1 = Msg::with_data(MsgData::LivePriceUpdated(PriceUpdated {
             pair_id: "pair_id",
             datetime: 0,
             price: 1.0,
             ..Default::default()
-        });
-        let e2 = Msg::LivePriceUpdated(PriceUpdated {
+        }));
+        let e2 = Msg::with_data(MsgData::LivePriceUpdated(PriceUpdated {
             pair_id: "pair_id",
             datetime: SECOND,
             price: 2.0,
             ..Default::default()
-        });
+        }));
         actor.act(&e1).await.unwrap();
         let actual_e = actor.act(&e2).await.unwrap();
-        let expected_e = vec![Msg::AveragePriceUpdated(PriceUpdated {
+        let expected_e = vec![MsgData::AveragePriceUpdated(PriceUpdated {
             pair_id: "pair_id",
             datetime: SECOND,
             price: 1.5,
@@ -93,33 +93,33 @@ mod tests {
     #[async_std::test]
     async fn actor_should_calculate_prices_from_given_sliding_window() {
         let mut actor = SlidingAverage::new(SECOND);
-        let e1 = Msg::LivePriceUpdated(PriceUpdated {
+        let e1 = Msg::with_data(MsgData::LivePriceUpdated(PriceUpdated {
             datetime: 0,
             price: 1.0,
             ..Default::default()
-        });
-        let e2 = Msg::LivePriceUpdated(PriceUpdated {
+        }));
+        let e2 = Msg::with_data(MsgData::LivePriceUpdated(PriceUpdated {
             datetime: SECOND,
             price: 2.0,
             ..Default::default()
-        });
-        let e3 = Msg::LivePriceUpdated(PriceUpdated {
+        }));
+        let e3 = Msg::with_data(MsgData::LivePriceUpdated(PriceUpdated {
             datetime: SECOND * 2,
             price: 3.0,
             ..Default::default()
-        });
+        }));
         actor.act(&e1).await.unwrap();
         let actual_e1 = actor.act(&e2).await.unwrap();
         let actual_e2 = actor.act(&e3).await.unwrap();
 
-        let expected_e1 = vec![Msg::AveragePriceUpdated(PriceUpdated {
+        let expected_e1 = vec![MsgData::AveragePriceUpdated(PriceUpdated {
             datetime: SECOND,
             price: 1.5,
             ..Default::default()
         })];
         assert_eq!(expected_e1, actual_e1);
 
-        let expected_e2 = vec![Msg::AveragePriceUpdated(PriceUpdated {
+        let expected_e2 = vec![MsgData::AveragePriceUpdated(PriceUpdated {
             datetime: SECOND * 2,
             price: 2.5,
             ..Default::default()

@@ -1,4 +1,4 @@
-use crate::messaging::{message, message::Msg, processor::Actor};
+use crate::messaging::{message, message::Msg, message::MsgData, processor::Actor};
 use anyhow::Result;
 use async_trait::async_trait;
 
@@ -26,13 +26,13 @@ impl<'a, E> Actor for Trader<'a, E>
 where
     E: Exchange + Send + Sync,
 {
-    async fn act(&mut self, msg: &Msg) -> Result<Vec<Msg>> {
-        let res = match msg {
-            Msg::Buy => {
+    async fn act(&mut self, msg: &Msg) -> Result<Vec<MsgData>> {
+        let res = match msg.data {
+            MsgData::Buy => {
                 let assets = self.exchange.fetch_assets().await?;
                 execute(self.exchange, assets.fiat, OrderType::Buy).await?
             }
-            Msg::Sell => {
+            MsgData::Sell => {
                 let assets = self.exchange.fetch_assets().await?;
                 execute(self.exchange, assets.coin, OrderType::Sell).await?
             }
@@ -46,7 +46,7 @@ async fn execute<'a, E>(
     exchange: &'a mut E,
     asset: Option<Asset>,
     order_type: OrderType,
-) -> Result<Vec<Msg>>
+) -> Result<Vec<MsgData>>
 where
     E: Exchange,
 {
@@ -59,7 +59,7 @@ where
                 order_type,
             };
             return exchange.place_market_order(&order).await.map(|_| {
-                vec![Msg::OrderExecuted(message::MarketOrder {
+                vec![MsgData::OrderExecuted(message::MarketOrder {
                     amount: order.amount,
                     ask_currency: order.ask_currency,
                     bid_currency: order.bid_currency,
@@ -93,7 +93,7 @@ mod tests {
         });
         let mut trader = Trader::new(&mut exchange);
 
-        trader.act(&Msg::Buy).await.unwrap();
+        trader.act(&Msg::with_data(MsgData::Buy)).await.unwrap();
 
         let expected = vec![MarketOrder {
             bid_currency: "EUR".into(),
@@ -116,7 +116,7 @@ mod tests {
         });
         let mut trader = Trader::new(&mut exchange);
 
-        trader.act(&Msg::Buy).await.unwrap();
+        trader.act(&Msg::with_data(MsgData::Buy)).await.unwrap();
 
         let expected = vec![MarketOrder {
             bid_currency: "EUR".into(),
@@ -135,7 +135,7 @@ mod tests {
         });
         let mut trader = Trader::new(&mut exchange);
 
-        trader.act(&Msg::Buy).await.unwrap();
+        trader.act(&Msg::with_data(MsgData::Buy)).await.unwrap();
 
         let expected: Vec<MarketOrder> = vec![];
         let actual = exchange.recorded_orders;
@@ -153,7 +153,7 @@ mod tests {
         });
         let mut trader = Trader::new(&mut exchange);
 
-        trader.act(&Msg::Buy).await.unwrap();
+        trader.act(&Msg::with_data(MsgData::Buy)).await.unwrap();
 
         let expected: Vec<MarketOrder> = vec![];
         let actual = exchange.recorded_orders;
@@ -171,9 +171,9 @@ mod tests {
         });
         let mut trader = Trader::new(&mut exchange);
 
-        let actual = trader.act(&Msg::Buy).await.unwrap();
+        let actual = trader.act(&Msg::with_data(MsgData::Buy)).await.unwrap();
 
-        let expected = vec![Msg::OrderExecuted(message::MarketOrder {
+        let expected = vec![MsgData::OrderExecuted(message::MarketOrder {
             bid_currency: "EUR".into(),
             ask_currency: "BTC".into(),
             amount: 50.0,
@@ -193,7 +193,7 @@ mod tests {
         });
         let mut trader = Trader::new(&mut exchange);
 
-        trader.act(&Msg::Sell).await.unwrap();
+        trader.act(&Msg::with_data(MsgData::Sell)).await.unwrap();
 
         let expected = vec![MarketOrder {
             bid_currency: "EUR".into(),
@@ -216,7 +216,7 @@ mod tests {
         });
         let mut trader = Trader::new(&mut exchange);
 
-        trader.act(&Msg::Sell).await.unwrap();
+        trader.act(&Msg::with_data(MsgData::Sell)).await.unwrap();
 
         let expected = vec![MarketOrder {
             bid_currency: "EUR".into(),
@@ -235,7 +235,7 @@ mod tests {
         });
         let mut trader = Trader::new(&mut exchange);
 
-        trader.act(&Msg::Sell).await.unwrap();
+        trader.act(&Msg::with_data(MsgData::Sell)).await.unwrap();
 
         let expected: Vec<MarketOrder> = vec![];
         let actual = exchange.recorded_orders;
@@ -253,7 +253,7 @@ mod tests {
         });
         let mut trader = Trader::new(&mut exchange);
 
-        trader.act(&Msg::Sell).await.unwrap();
+        trader.act(&Msg::with_data(MsgData::Sell)).await.unwrap();
 
         let expected: Vec<MarketOrder> = vec![];
         let actual = exchange.recorded_orders;
@@ -271,9 +271,9 @@ mod tests {
         });
         let mut trader = Trader::new(&mut exchange);
 
-        let actual = trader.act(&Msg::Sell).await.unwrap();
+        let actual = trader.act(&Msg::with_data(MsgData::Sell)).await.unwrap();
 
-        let expected = vec![Msg::OrderExecuted(message::MarketOrder {
+        let expected = vec![MsgData::OrderExecuted(message::MarketOrder {
             bid_currency: "EUR".into(),
             ask_currency: "BTC".into(),
             amount: 0.0000001,

@@ -1,7 +1,5 @@
-use crate::exchange::{
-    Assets, Exchange, ExchangeStreamEvent, MarketOrder, Order, OrderType, Pair, Subscription,
-};
-use crate::messaging::message::{Msg, PriceUpdated};
+use crate::exchange::{Assets, Exchange, MarketOrder, Order, OrderType, Pair, Subscription};
+use crate::messaging::message::{Msg, MsgData, MsgMetaData, PriceUpdated};
 use crate::tools::networking::HttpClient;
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
@@ -18,6 +16,7 @@ use serde_json::Value;
 use sha2::Sha256;
 use std::collections::HashMap;
 use std::io::prelude::Read;
+use std::time::{SystemTime, UNIX_EPOCH};
 use std::{env, thread};
 use uuid::Uuid;
 use websocket::client::sync::Client;
@@ -118,7 +117,7 @@ impl Exchange for Okex {
         Box::new(iterator)
     }
 
-    async fn place_market_order(&mut self, order: &MarketOrder) -> Result<()> {
+    async fn place_market_order(&mut self, order: &MarketOrder) -> Result<MarketOrder> {
         let timestamp = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
         let method = "POST";
         let request_path = "/api/spot/v3/orders";
@@ -193,7 +192,8 @@ impl Exchange for Okex {
             {
                 Ok(res) => {
                     info!("{:#?}", res.body());
-                    Result::Ok(())
+                    //TODO: Return actual amount
+                    Result::Ok(order.clone())
                 }
                 Err(e) => {
                     info!("{:#?}", e);
@@ -215,7 +215,8 @@ impl Exchange for Okex {
                     let success = res_json["result"].as_bool().unwrap();
 
                     if success {
-                        Result::Ok(())
+                        //TODO: Return actual amount
+                        Result::Ok(order.clone())
                     } else {
                         Err(anyhow!("Request unsuccessful"))
                     }
@@ -236,10 +237,10 @@ struct EventStream {
 
 impl EventStream {
     fn new(receiver: Receiver<Result<OwnedMessage, WebSocketError>>) -> Self {
-        EventStream { 
-            receiver, 
+        EventStream {
+            receiver,
             intermediate_pair_store: HashMap::new(),
-         }
+        }
     }
 }
 
@@ -269,8 +270,22 @@ impl Iterator for EventStream {
                             bid_currency: String::from(bid_ask[0]),
                             ask_currency: String::from(bid_ask[1]),
                         };
+                        let uuid = Uuid::new_v4();
                         // TODO: Return real data
-                        Some(Msg::LivePriceUpdated(PriceUpdated{ ..Default::default() }))
+                        Some(Msg {
+                            data: MsgData::LivePriceUpdated(PriceUpdated {
+                                ..Default::default()
+                            }),
+                            metadata: MsgMetaData {
+                                id: uuid,
+                                causation_id: uuid,
+                                correlation_id: uuid,
+                                created: SystemTime::now()
+                                    .duration_since(UNIX_EPOCH)
+                                    .expect("time went backwards")
+                                    .as_micros(),
+                            },
+                        })
                     } else {
                         println!("event");
                         None
@@ -292,8 +307,22 @@ impl Iterator for EventStream {
                             bid_orders,
                             ask_orders,
                         );
+                        let uuid = Uuid::new_v4();
                         // TODO: Return real data
-                        Some(Msg::LivePriceUpdated(PriceUpdated{ ..Default::default() }))
+                        Some(Msg {
+                            data: MsgData::LivePriceUpdated(PriceUpdated {
+                                ..Default::default()
+                            }),
+                            metadata: MsgMetaData {
+                                id: uuid,
+                                causation_id: uuid,
+                                correlation_id: uuid,
+                                created: SystemTime::now()
+                                    .duration_since(UNIX_EPOCH)
+                                    .expect("time went backwards")
+                                    .as_micros(),
+                            },
+                        })
                     } else {
                         println!("table");
                         None

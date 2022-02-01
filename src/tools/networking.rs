@@ -37,27 +37,6 @@ pub trait HttpClient {
     async fn send(self, request: Request) -> Result<Response>;
 }
 
-pub struct MockClient {
-    responses: HashMap<(Method, Url), Response>,
-}
-
-impl MockClient {
-    pub fn new(responses: HashMap<(Method, Url), Response>) -> Self {
-        MockClient { responses }
-    }
-}
-
-#[async_trait]
-impl HttpClient for MockClient {
-    async fn send(self, request: Request) -> Result<Response> {
-        Ok(self
-            .responses
-            .get(&(request.method, request.url))
-            .expect("Mock does not contain response of requested url.")
-            .clone())
-    }
-}
-
 struct Client {
     client: reqwest::Client,
 }
@@ -95,8 +74,29 @@ fn build_request(client: &reqwest::Client, request: Request) -> Result<reqwest::
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use super::*;
+
+    pub struct MockClient {
+        responses: HashMap<(Method, Url), Response>,
+    }
+
+    impl MockClient {
+        pub fn new(responses: HashMap<(Method, Url), Response>) -> Self {
+            MockClient { responses }
+        }
+    }
+
+    #[async_trait]
+    impl HttpClient for MockClient {
+        async fn send(self, request: Request) -> Result<Response> {
+            Ok(self
+                .responses
+                .get(&(request.method, request.url))
+                .expect("Mock does not contain response of requested url.")
+                .clone())
+        }
+    }
 
     #[async_std::test]
     async fn mock_client_should_return_given_response() {

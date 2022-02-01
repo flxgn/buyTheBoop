@@ -12,9 +12,14 @@ use uuid::Uuid;
 pub trait Exchange {
     async fn event_stream(&self) -> Box<dyn Iterator<Item = Msg>>;
 
-    async fn place_market_order(&mut self, order: &MarketOrder) -> Result<()>;
+    async fn place_market_order(&mut self, order: &MarketOrder) -> Result<MarketOrder>;
 
     async fn fetch_assets(&self) -> Result<Assets>;
+}
+
+#[derive(Debug, PartialEq, Clone, Default)]
+pub struct ExchangeOptions {
+    pub fee: f64,
 }
 
 #[derive(Debug, PartialEq, Clone, Default)]
@@ -90,9 +95,9 @@ impl Exchange for MockExchange {
         unimplemented!()
     }
 
-    async fn place_market_order(&mut self, order: &MarketOrder) -> Result<()> {
+    async fn place_market_order(&mut self, order: &MarketOrder) -> Result<MarketOrder> {
         self.recorded_orders.push(order.clone());
-        Ok(())
+        Ok(order.clone())
     }
 
     async fn fetch_assets(&self) -> Result<Assets> {
