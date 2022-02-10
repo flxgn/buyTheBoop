@@ -1,4 +1,4 @@
-use crate::messaging::{message, message::Msg, message::MsgData, processor::Actor};
+use crate::messaging::{message::Order, message::Msg, message::MsgData, processor::Actor};
 use anyhow::Result;
 use async_trait::async_trait;
 
@@ -59,15 +59,18 @@ where
                 order_type,
             };
             return exchange.place_market_order(&order).await.map(|_| {
-                vec![MsgData::OrderExecuted(message::MarketOrder {
-                    amount: order.amount,
-                    quote: order.quote,
-                    base: order.base,
-                    order_type: match order.order_type {
-                        OrderType::Buy => message::OrderType::Buy,
-                        OrderType::Sell => message::OrderType::Sell,
-                    },
-                })]
+                match order.order_type {
+                    OrderType::Buy => vec![MsgData::Bought(Order {
+                        amount: order.amount,
+                        quote: order.quote,
+                        base: order.base,
+                    })],
+                    OrderType::Sell => vec![MsgData::Sold(Order {
+                        amount: order.amount,
+                        quote: order.quote,
+                        base: order.base,
+                    })],
+                }
             });
         }
     }
@@ -81,9 +84,8 @@ mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
 
-    //TODO: Check if this really executes the right way (just switching buy and sell and keeping currencies the same)
     #[async_std::test]
-    async fn should_buy_max_amount_if_fiat_exists() {
+    async fn should_buy_max_amount_of_quote() {
         let mut exchange = MockExchange::new(Assets {
             quote: Some(Asset {
                 amount: 40.0,
@@ -106,7 +108,7 @@ mod tests {
     }
 
     #[async_std::test]
-    async fn should_buy_different_max_amount_if_fiat_exists() {
+    async fn should_buy_different_max_amount_of_quote() {
         let mut exchange = MockExchange::new(Assets {
             quote: Some(Asset {
                 amount: 50.0,
@@ -129,7 +131,7 @@ mod tests {
     }
 
     #[async_std::test]
-    async fn should_not_buy_if_fiat_not_exists() {
+    async fn should_not_buy_quote_when_no_assets() {
         let mut exchange = MockExchange::new(Assets {
             ..Default::default()
         });
@@ -143,7 +145,7 @@ mod tests {
     }
 
     #[async_std::test]
-    async fn should_not_buy_if_fiat_is_zero() {
+    async fn should_not_buy_quote_when_zero() {
         let mut exchange = MockExchange::new(Assets {
             quote: Some(Asset {
                 amount: 0.0,
@@ -161,7 +163,7 @@ mod tests {
     }
 
     #[async_std::test]
-    async fn should_create_buy_order_executed_event() {
+    async fn should_emit_bought_order_event() {
         let mut exchange = MockExchange::new(Assets {
             quote: Some(Asset {
                 amount: 50.0,
@@ -173,17 +175,16 @@ mod tests {
 
         let actual = trader.act(&Msg::with_data(MsgData::Buy)).await.unwrap();
 
-        let expected = vec![MsgData::OrderExecuted(message::MarketOrder {
+        let expected = vec![MsgData::Bought(Order {
             base: "BTC".into(),
             quote: "USDT".into(),
             amount: 50.0,
-            order_type: message::OrderType::Buy,
         })];
         assert_eq!(expected, actual)
     }
 
     #[async_std::test]
-    async fn should_sell_max_amount_if_coin_exists() {
+    async fn should_sell_max_amount_of_base() {
         let mut exchange = MockExchange::new(Assets {
             quote: None,
             base: Some(Asset {
@@ -206,7 +207,7 @@ mod tests {
     }
 
     #[async_std::test]
-    async fn should_sell_different_max_amount_if_coin_exists() {
+    async fn should_sell_different_max_amount_of_base() {
         let mut exchange = MockExchange::new(Assets {
             quote: None,
             base: Some(Asset {
@@ -229,7 +230,7 @@ mod tests {
     }
 
     #[async_std::test]
-    async fn should_not_sell_if_coin_not_exists() {
+    async fn should_not_sell_when_no_assets() {
         let mut exchange = MockExchange::new(Assets {
             ..Default::default()
         });
@@ -243,7 +244,7 @@ mod tests {
     }
 
     #[async_std::test]
-    async fn should_not_sell_if_coin_is_zero() {
+    async fn should_not_sell_when_base_zero() {
         let mut exchange = MockExchange::new(Assets {
             quote: None,
             base: Some(Asset {
@@ -261,7 +262,7 @@ mod tests {
     }
 
     #[async_std::test]
-    async fn should_create_sell_order_executed_event() {
+    async fn should_emit_sold_order_event() {
         let mut exchange = MockExchange::new(Assets {
             quote: None,
             base: Some(Asset {
@@ -273,11 +274,10 @@ mod tests {
 
         let actual = trader.act(&Msg::with_data(MsgData::Sell)).await.unwrap();
 
-        let expected = vec![MsgData::OrderExecuted(message::MarketOrder {
+        let expected = vec![MsgData::Sold(Order {
             base: "BTC".into(),
             quote: "USDT".into(),
             amount: 0.0000001,
-            order_type: message::OrderType::Sell,
         })];
         assert_eq!(expected, actual)
     }

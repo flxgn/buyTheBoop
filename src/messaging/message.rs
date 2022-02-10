@@ -22,10 +22,9 @@ pub enum OrderType {
 }
 
 #[derive(PartialEq, Debug, Clone)]
-pub struct MarketOrder {
+pub struct Order {
     pub base: String,
     pub quote: String,
-    pub order_type: OrderType,
     pub amount: f64,
 }
 
@@ -33,7 +32,8 @@ pub struct MarketOrder {
 pub enum MsgData {
     LivePriceUpdated(PriceUpdated),
     AveragePriceUpdated(PriceUpdated),
-    OrderExecuted(MarketOrder),
+    Bought(Order),
+    Sold(Order),
     Buy,
     Sell,
     Shutdown,
