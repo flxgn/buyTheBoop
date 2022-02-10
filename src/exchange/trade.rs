@@ -30,11 +30,11 @@ where
         let res = match msg.data {
             MsgData::Buy => {
                 let assets = self.exchange.fetch_assets().await?;
-                execute(self.exchange, assets.fiat, OrderType::Buy).await?
+                execute(self.exchange, assets.quote, OrderType::Buy).await?
             }
             MsgData::Sell => {
                 let assets = self.exchange.fetch_assets().await?;
-                execute(self.exchange, assets.coin, OrderType::Sell).await?
+                execute(self.exchange, assets.base, OrderType::Sell).await?
             }
             _ => vec![],
         };
@@ -53,16 +53,16 @@ where
     if let Some(asset) = asset {
         if asset.amount > 0.0 {
             let order = MarketOrder {
-                bid_currency: "EUR".into(),
-                ask_currency: "BTC".into(),
+                base: "BTC".into(),
+                quote: "USDT".into(),
                 amount: asset.amount,
                 order_type,
             };
             return exchange.place_market_order(&order).await.map(|_| {
                 vec![MsgData::OrderExecuted(message::MarketOrder {
                     amount: order.amount,
-                    ask_currency: order.ask_currency,
-                    bid_currency: order.bid_currency,
+                    quote: order.quote,
+                    base: order.base,
                     order_type: match order.order_type {
                         OrderType::Buy => message::OrderType::Buy,
                         OrderType::Sell => message::OrderType::Sell,
@@ -85,19 +85,19 @@ mod tests {
     #[async_std::test]
     async fn should_buy_max_amount_if_fiat_exists() {
         let mut exchange = MockExchange::new(Assets {
-            fiat: Some(Asset {
+            quote: Some(Asset {
                 amount: 40.0,
-                name: "EUR".into(),
+                name: "USDT".into(),
             }),
-            coin: None,
+            base: None,
         });
         let mut trader = Trader::new(&mut exchange);
 
         trader.act(&Msg::with_data(MsgData::Buy)).await.unwrap();
 
         let expected = vec![MarketOrder {
-            bid_currency: "EUR".into(),
-            ask_currency: "BTC".into(),
+            base: "BTC".into(),
+            quote: "USDT".into(),
             amount: 40.0,
             order_type: OrderType::Buy,
         }];
@@ -108,19 +108,19 @@ mod tests {
     #[async_std::test]
     async fn should_buy_different_max_amount_if_fiat_exists() {
         let mut exchange = MockExchange::new(Assets {
-            fiat: Some(Asset {
+            quote: Some(Asset {
                 amount: 50.0,
-                name: "EUR".into(),
+                name: "USDT".into(),
             }),
-            coin: None,
+            base: None,
         });
         let mut trader = Trader::new(&mut exchange);
 
         trader.act(&Msg::with_data(MsgData::Buy)).await.unwrap();
 
         let expected = vec![MarketOrder {
-            bid_currency: "EUR".into(),
-            ask_currency: "BTC".into(),
+            base: "BTC".into(),
+            quote: "USDT".into(),
             amount: 50.0,
             order_type: OrderType::Buy,
         }];
@@ -145,11 +145,11 @@ mod tests {
     #[async_std::test]
     async fn should_not_buy_if_fiat_is_zero() {
         let mut exchange = MockExchange::new(Assets {
-            fiat: Some(Asset {
+            quote: Some(Asset {
                 amount: 0.0,
-                name: "EUR".into(),
+                name: "USDT".into(),
             }),
-            coin: None,
+            base: None,
         });
         let mut trader = Trader::new(&mut exchange);
 
@@ -163,19 +163,19 @@ mod tests {
     #[async_std::test]
     async fn should_create_buy_order_executed_event() {
         let mut exchange = MockExchange::new(Assets {
-            fiat: Some(Asset {
+            quote: Some(Asset {
                 amount: 50.0,
-                name: "EUR".into(),
+                name: "USDT".into(),
             }),
-            coin: None,
+            base: None,
         });
         let mut trader = Trader::new(&mut exchange);
 
         let actual = trader.act(&Msg::with_data(MsgData::Buy)).await.unwrap();
 
         let expected = vec![MsgData::OrderExecuted(message::MarketOrder {
-            bid_currency: "EUR".into(),
-            ask_currency: "BTC".into(),
+            base: "BTC".into(),
+            quote: "USDT".into(),
             amount: 50.0,
             order_type: message::OrderType::Buy,
         })];
@@ -185,8 +185,8 @@ mod tests {
     #[async_std::test]
     async fn should_sell_max_amount_if_coin_exists() {
         let mut exchange = MockExchange::new(Assets {
-            fiat: None,
-            coin: Some(Asset {
+            quote: None,
+            base: Some(Asset {
                 amount: 0.0000001,
                 name: "BTC".into(),
             }),
@@ -196,8 +196,8 @@ mod tests {
         trader.act(&Msg::with_data(MsgData::Sell)).await.unwrap();
 
         let expected = vec![MarketOrder {
-            bid_currency: "EUR".into(),
-            ask_currency: "BTC".into(),
+            base: "BTC".into(),
+            quote: "USDT".into(),
             amount: 0.0000001,
             order_type: OrderType::Sell,
         }];
@@ -208,8 +208,8 @@ mod tests {
     #[async_std::test]
     async fn should_sell_different_max_amount_if_coin_exists() {
         let mut exchange = MockExchange::new(Assets {
-            fiat: None,
-            coin: Some(Asset {
+            quote: None,
+            base: Some(Asset {
                 amount: 0.0002,
                 name: "BTC".into(),
             }),
@@ -219,8 +219,8 @@ mod tests {
         trader.act(&Msg::with_data(MsgData::Sell)).await.unwrap();
 
         let expected = vec![MarketOrder {
-            bid_currency: "EUR".into(),
-            ask_currency: "BTC".into(),
+            base: "BTC".into(),
+            quote: "USDT".into(),
             amount: 0.0002,
             order_type: OrderType::Sell,
         }];
@@ -245,8 +245,8 @@ mod tests {
     #[async_std::test]
     async fn should_not_sell_if_coin_is_zero() {
         let mut exchange = MockExchange::new(Assets {
-            fiat: None,
-            coin: Some(Asset {
+            quote: None,
+            base: Some(Asset {
                 amount: 0.0,
                 name: "BTC".into(),
             }),
@@ -263,8 +263,8 @@ mod tests {
     #[async_std::test]
     async fn should_create_sell_order_executed_event() {
         let mut exchange = MockExchange::new(Assets {
-            fiat: None,
-            coin: Some(Asset {
+            quote: None,
+            base: Some(Asset {
                 amount: 0.0000001,
                 name: "BTC".into(),
             }),
@@ -274,8 +274,8 @@ mod tests {
         let actual = trader.act(&Msg::with_data(MsgData::Sell)).await.unwrap();
 
         let expected = vec![MsgData::OrderExecuted(message::MarketOrder {
-            bid_currency: "EUR".into(),
-            ask_currency: "BTC".into(),
+            base: "BTC".into(),
+            quote: "USDT".into(),
             amount: 0.0000001,
             order_type: message::OrderType::Sell,
         })];

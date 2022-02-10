@@ -81,19 +81,19 @@ mod tests {
         let mut exchange = SimulatedExchange::new(
             vec![],
             Assets {
-                fiat: Some(Asset {
+                quote: Some(Asset {
                     amount: 40.0,
                     name: "EUR".into(),
                 }),
-                coin: None,
+                base: None,
             },
             ExchangeOptions {
                 ..Default::default()
             },
         );
         let expected_order = MarketOrder {
-            bid_currency: "EUR".into(),
-            ask_currency: "BTC".into(),
+            base: "EUR".into(),
+            quote: "BTC".into(),
             amount: 40.0,
             order_type: OrderType::Sell,
         };
@@ -107,20 +107,20 @@ mod tests {
         let mut exchange = SimulatedExchange::new(
             vec![],
             Assets {
-                fiat: Some(Asset {
+                quote: Some(Asset {
                     amount: 40.0,
-                    name: "EUR".into(),
+                    name: "USDT".into(),
                 }),
-                coin: None,
+                base: None,
             },
             ExchangeOptions { fee: 10.0 },
         );
         //TODO Should be own return type becuase returned value will probably be the amount of bought coin
         let expected_order = MarketOrder {
-            bid_currency: "EUR".into(),
-            ask_currency: "BTC".into(),
+            base: "BTC".into(),
+            quote: "USDT".into(),
             amount: 36.0,
-            order_type: OrderType::Sell,
+            order_type: OrderType::Buy,
         };
         let actual_order = exchange.place_market_order(&expected_order).await.unwrap();
         assert_eq!(expected_order, actual_order)

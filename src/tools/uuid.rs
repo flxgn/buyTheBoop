@@ -43,7 +43,6 @@ pub mod tests {
         }
     }
 
-    //TODO: Check if this really executes the right way (just switching buy and sell and keeping currencies the same)
     #[test]
     fn mock_new_random_returns_uuid() {
         let mut uuid_provider = MockUuidProvider::new();

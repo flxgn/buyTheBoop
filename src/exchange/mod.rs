@@ -30,8 +30,8 @@ pub struct Asset {
 
 #[derive(Debug, PartialEq, Clone, Default)]
 pub struct Assets {
-    pub fiat: Option<Asset>,
-    pub coin: Option<Asset>,
+    pub base: Option<Asset>,
+    pub quote: Option<Asset>,
 }
 
 #[derive(Debug, Clone)]
@@ -68,8 +68,8 @@ pub enum OrderType {
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct MarketOrder {
-    pub bid_currency: String,
-    pub ask_currency: String,
+    pub base: String,
+    pub quote: String,
     pub order_type: OrderType,
     pub amount: f64,
 }
@@ -113,11 +113,11 @@ mod tests {
     #[async_std::test]
     async fn mock_should_fetch_provided_assets() {
         let given_assets = Assets {
-            fiat: Some(Asset {
+            quote: Some(Asset {
                 name: "USD".into(),
                 amount: 50.0,
             }),
-            coin: None,
+            base: None,
         };
         let exchange = MockExchange::new(given_assets.clone());
         let actual = exchange.fetch_assets().await.unwrap();
@@ -127,8 +127,8 @@ mod tests {
     #[async_std::test]
     async fn mock_should_fetch_different_assets() {
         let given_assets = Assets {
-            fiat: None,
-            coin: Some(Asset {
+            quote: None,
+            base: Some(Asset {
                 name: "BTW".into(),
                 amount: 0.01,
             }),
@@ -144,8 +144,8 @@ mod tests {
             ..Default::default()
         });
         let expected_order = MarketOrder {
-            bid_currency: "EUR".into(),
-            ask_currency: "BTC".into(),
+            base: "EUR".into(),
+            quote: "BTC".into(),
             amount: 50.0,
             order_type: OrderType::Buy,
         };
@@ -159,8 +159,8 @@ mod tests {
             ..Default::default()
         });
         let expected_order = MarketOrder {
-            bid_currency: "BTC".into(),
-            ask_currency: "EUR".into(),
+            base: "BTC".into(),
+            quote: "EUR".into(),
             amount: 40.0,
             order_type: OrderType::Sell,
         };

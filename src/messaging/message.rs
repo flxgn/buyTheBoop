@@ -23,8 +23,8 @@ pub enum OrderType {
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct MarketOrder {
-    pub bid_currency: String,
-    pub ask_currency: String,
+    pub base: String,
+    pub quote: String,
     pub order_type: OrderType,
     pub amount: f64,
 }

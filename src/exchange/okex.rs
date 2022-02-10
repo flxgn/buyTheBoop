@@ -132,7 +132,7 @@ impl Exchange for Okex {
             OrderType::Sell => "size",
         };
         let instrument_id =
-            vec![order.bid_currency.as_str(), order.ask_currency.as_str()].join("-");
+            vec![order.base.as_str(), order.quote.as_str()].join("-");
 
         let rounded_amount = match order.order_type {
             OrderType::Buy => order.amount.to_string(),

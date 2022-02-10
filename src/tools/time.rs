@@ -46,7 +46,6 @@ pub mod tests {
         }
     }
 
-    //TODO: Check if this really executes the right way (just switching buy and sell and keeping currencies the same)
     #[test]
     fn mock_now_returns_time() {
         let mut time_provider = MockTimeProvider::new();
