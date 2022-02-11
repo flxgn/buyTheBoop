@@ -2,17 +2,20 @@ pub mod okex;
 pub mod simulation;
 pub mod trade;
 
-use crate::messaging::message::Msg;
+use crate::messaging::message::{MessageId, Msg};
 use anyhow::Result;
 use async_trait::async_trait;
+use hmac::digest::generic_array::typenum::Or;
 use std::iter::Iterator;
 use uuid::Uuid;
+
+pub type Amount = f64;
 
 #[async_trait]
 pub trait Exchange {
     async fn event_stream(&self) -> Box<dyn Iterator<Item = Msg>>;
 
-    async fn place_market_order(&mut self, order: &MarketOrder) -> Result<MarketOrder>;
+    async fn place_market_order(&mut self, order: &MarketOrder) -> Result<Amount>;
 
     async fn fetch_assets(&self) -> Result<Assets>;
 }
@@ -66,8 +69,15 @@ pub enum OrderType {
     Sell,
 }
 
-#[derive(PartialEq, Debug, Clone)]
+impl Default for OrderType {
+    fn default() -> Self {
+        OrderType::Buy
+    }
+}
+
+#[derive(PartialEq, Debug, Clone, Default)]
 pub struct MarketOrder {
+    pub correlation_id: MessageId,
     pub base: String,
     pub quote: String,
     pub order_type: OrderType,
@@ -95,9 +105,9 @@ impl Exchange for MockExchange {
         unimplemented!()
     }
 
-    async fn place_market_order(&mut self, order: &MarketOrder) -> Result<MarketOrder> {
+    async fn place_market_order(&mut self, order: &MarketOrder) -> Result<Amount> {
         self.recorded_orders.push(order.clone());
-        Ok(order.clone())
+        Ok(order.amount)
     }
 
     async fn fetch_assets(&self) -> Result<Assets> {
@@ -148,6 +158,7 @@ mod tests {
             quote: "BTC".into(),
             amount: 50.0,
             order_type: OrderType::Buy,
+            ..Default::default()
         };
         exchange.place_market_order(&expected_order).await.unwrap();
         assert_eq!(vec![expected_order], exchange.recorded_orders)
@@ -163,6 +174,7 @@ mod tests {
             quote: "EUR".into(),
             amount: 40.0,
             order_type: OrderType::Sell,
+            ..Default::default()
         };
         exchange.place_market_order(&expected_order).await.unwrap();
         assert_eq!(vec![expected_order], exchange.recorded_orders)

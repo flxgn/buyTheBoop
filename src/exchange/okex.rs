@@ -1,4 +1,6 @@
-use crate::exchange::{Assets, Exchange, MarketOrder, Order, OrderType, Pair, Subscription};
+use crate::exchange::{
+    Amount, Assets, Exchange, MarketOrder, Order, OrderType, Pair, Subscription,
+};
 use crate::messaging::message::{Msg, MsgData, MsgMetaData, PriceUpdated};
 use crate::tools::networking::HttpClient;
 use anyhow::{anyhow, Result};
@@ -117,7 +119,7 @@ impl Exchange for Okex {
         Box::new(iterator)
     }
 
-    async fn place_market_order(&mut self, order: &MarketOrder) -> Result<MarketOrder> {
+    async fn place_market_order(&mut self, order: &MarketOrder) -> Result<Amount> {
         let timestamp = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
         let method = "POST";
         let request_path = "/api/spot/v3/orders";
@@ -131,8 +133,7 @@ impl Exchange for Okex {
             OrderType::Buy => "notional",
             OrderType::Sell => "size",
         };
-        let instrument_id =
-            vec![order.base.as_str(), order.quote.as_str()].join("-");
+        let instrument_id = vec![order.base.as_str(), order.quote.as_str()].join("-");
 
         let rounded_amount = match order.order_type {
             OrderType::Buy => order.amount.to_string(),
@@ -193,7 +194,7 @@ impl Exchange for Okex {
                 Ok(res) => {
                     info!("{:#?}", res.body());
                     //TODO: Return actual amount
-                    Result::Ok(order.clone())
+                    Result::Ok(order.amount)
                 }
                 Err(e) => {
                     info!("{:#?}", e);
@@ -216,7 +217,7 @@ impl Exchange for Okex {
 
                     if success {
                         //TODO: Return actual amount
-                        Result::Ok(order.clone())
+                        Result::Ok(order.amount)
                     } else {
                         Err(anyhow!("Request unsuccessful"))
                     }
