@@ -23,20 +23,24 @@ impl Actor for SimpleCrossover {
         let res = match &msg.data {
             MsgData::LivePriceUpdated(e) => {
                 let result = self
-                    .latest_live
-                    .and_then(|live| {
-                        self.latest_average.map(|avg| {
-                            if e.price > avg && live < avg {
-                                vec![MsgData::Buy]
-                            } else if e.price < avg && live > avg {
-                                vec![MsgData::Sell]
-                            } else {
-                                vec![]
-                            }
-                        })
+                    .latest_average
+                    .map(|avg| {
+                        if e.price > avg
+                            && (self.latest_live.is_none() || self.latest_live < Some(avg))
+                        {
+                            vec![MsgData::Buy]
+                        } else if e.price < avg
+                            && (self.latest_live.is_none() || self.latest_live > Some(avg))
+                        {
+                            vec![MsgData::Sell]
+                        } else {
+                            vec![]
+                        }
                     })
                     .unwrap_or(vec![]);
-                self.latest_live = Some(e.price);
+                if self.latest_average.is_some() {
+                    self.latest_live = Some(e.price);
+                }
                 result
             }
             MsgData::AveragePriceUpdated(e) => {
@@ -142,6 +146,78 @@ mod tests {
     }
 
     #[async_std::test]
+    async fn actor_should_emit_buy_msg_if_live_price_starts_above_average() {
+        let mut aggr = SimpleCrossover::new();
+        let average_updated = Msg::with_data(MsgData::AveragePriceUpdated(PriceUpdated {
+            pair_id: "pair_id",
+            datetime: 0,
+            price: 1.0,
+            ..Default::default()
+        }));
+        let live_updated = Msg::with_data(MsgData::LivePriceUpdated(PriceUpdated {
+            pair_id: "pair_id",
+            datetime: SECOND,
+            price: 1.1,
+            ..Default::default()
+        }));
+        aggr.act(&average_updated).await.unwrap();
+        let actual = aggr.act(&live_updated).await.unwrap();
+        let expected: Vec<MsgData> = vec![MsgData::Buy];
+        assert_eq!(expected, actual)
+    }
+
+    #[async_std::test]
+    async fn actor_should_emit_buy_msg_if_live_price_starts_above_average_with_prior_already_above()
+    {
+        let mut aggr = SimpleCrossover::new();
+        let live_updated_1 = Msg::with_data(MsgData::LivePriceUpdated(PriceUpdated {
+            pair_id: "pair_id",
+            datetime: SECOND,
+            price: 1.1,
+            ..Default::default()
+        }));
+        let average_updated = Msg::with_data(MsgData::AveragePriceUpdated(PriceUpdated {
+            pair_id: "pair_id",
+            datetime: 0,
+            price: 1.0,
+            ..Default::default()
+        }));
+        let live_updated_2 = Msg::with_data(MsgData::LivePriceUpdated(PriceUpdated {
+            pair_id: "pair_id",
+            datetime: SECOND,
+            price: 1.2,
+            ..Default::default()
+        }));
+        aggr.act(&live_updated_1).await.unwrap();
+        aggr.act(&average_updated).await.unwrap();
+        let actual = aggr.act(&live_updated_2).await.unwrap();
+        let expected: Vec<MsgData> = vec![MsgData::Buy];
+        assert_eq!(expected, actual)
+    }
+
+    #[async_std::test]
+    async fn actor_should_emit_no_buy_if_average_price_update_after_live() {
+        let mut aggr = SimpleCrossover::new();
+        let live_updated = Msg::with_data(MsgData::LivePriceUpdated(PriceUpdated {
+            pair_id: "pair_id",
+            datetime: SECOND,
+            price: 1.1,
+            ..Default::default()
+        }));
+        let average_updated = Msg::with_data(MsgData::AveragePriceUpdated(PriceUpdated {
+            pair_id: "pair_id",
+            datetime: 0,
+            price: 1.0,
+            ..Default::default()
+        }));
+
+        aggr.act(&live_updated).await.unwrap();
+        let actual = aggr.act(&average_updated).await.unwrap();
+        let expected: Vec<MsgData> = vec![];
+        assert_eq!(expected, actual)
+    }
+
+    #[async_std::test]
     async fn actor_should_emit_sell_msg_if_live_price_crosses_average_downwards() {
         let mut aggr = SimpleCrossover::new();
         let average_updated = Msg::with_data(MsgData::AveragePriceUpdated(PriceUpdated {
@@ -193,6 +269,78 @@ mod tests {
         aggr.act(&average_updated).await.unwrap();
         aggr.act(&live_updated_1).await.unwrap();
         let actual = aggr.act(&live_updated_2).await.unwrap();
+        let expected: Vec<MsgData> = vec![];
+        assert_eq!(expected, actual)
+    }
+
+    #[async_std::test]
+    async fn actor_should_emit_sell_msg_if_live_price_starts_below_average() {
+        let mut aggr = SimpleCrossover::new();
+        let average_updated = Msg::with_data(MsgData::AveragePriceUpdated(PriceUpdated {
+            pair_id: "pair_id",
+            datetime: 0,
+            price: 1.0,
+            ..Default::default()
+        }));
+        let live_updated = Msg::with_data(MsgData::LivePriceUpdated(PriceUpdated {
+            pair_id: "pair_id",
+            datetime: SECOND,
+            price: 0.9,
+            ..Default::default()
+        }));
+        aggr.act(&average_updated).await.unwrap();
+        let actual = aggr.act(&live_updated).await.unwrap();
+        let expected: Vec<MsgData> = vec![MsgData::Sell];
+        assert_eq!(expected, actual)
+    }
+
+    #[async_std::test]
+    async fn actor_should_emit_sell_msg_if_live_price_starts_below_average_with_prior_already_below(
+    ) {
+        let mut aggr = SimpleCrossover::new();
+        let live_updated_1 = Msg::with_data(MsgData::LivePriceUpdated(PriceUpdated {
+            pair_id: "pair_id",
+            datetime: SECOND,
+            price: 0.9,
+            ..Default::default()
+        }));
+        let average_updated = Msg::with_data(MsgData::AveragePriceUpdated(PriceUpdated {
+            pair_id: "pair_id",
+            datetime: 0,
+            price: 1.0,
+            ..Default::default()
+        }));
+        let live_updated_2 = Msg::with_data(MsgData::LivePriceUpdated(PriceUpdated {
+            pair_id: "pair_id",
+            datetime: SECOND,
+            price: 0.8,
+            ..Default::default()
+        }));
+        aggr.act(&live_updated_1).await.unwrap();
+        aggr.act(&average_updated).await.unwrap();
+        let actual = aggr.act(&live_updated_2).await.unwrap();
+        let expected: Vec<MsgData> = vec![MsgData::Sell];
+        assert_eq!(expected, actual)
+    }
+
+    #[async_std::test]
+    async fn actor_should_emit_no_sell_if_average_price_update_after_live() {
+        let mut aggr = SimpleCrossover::new();
+        let live_updated = Msg::with_data(MsgData::LivePriceUpdated(PriceUpdated {
+            pair_id: "pair_id",
+            datetime: SECOND,
+            price: 0.8,
+            ..Default::default()
+        }));
+        let average_updated = Msg::with_data(MsgData::AveragePriceUpdated(PriceUpdated {
+            pair_id: "pair_id",
+            datetime: 0,
+            price: 1.0,
+            ..Default::default()
+        }));
+
+        aggr.act(&live_updated).await.unwrap();
+        let actual = aggr.act(&average_updated).await.unwrap();
         let expected: Vec<MsgData> = vec![];
         assert_eq!(expected, actual)
     }
