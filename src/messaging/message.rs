@@ -9,7 +9,6 @@ pub type MessageId = Uuid;
 
 #[derive(Debug, PartialEq, Clone, Default)]
 pub struct PriceUpdated {
-    pub id: EventId,
     pub pair_id: PairId,
     pub datetime: Timestamp,
     pub price: Price,
