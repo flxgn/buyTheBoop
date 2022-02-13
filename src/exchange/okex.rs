@@ -209,7 +209,7 @@ impl Exchange for Okex {
                 .send()
                 .await
             {
-                Ok(mut res) => {
+                Ok(res) => {
                     let res_text = res.text().await.unwrap();
                     info!("{}", res_text);
                     let res_json: Value = serde_json::from_str(&res_text).unwrap();

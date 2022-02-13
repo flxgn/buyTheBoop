@@ -5,7 +5,6 @@ pub mod trade;
 use crate::messaging::message::{MessageId, Msg};
 use anyhow::Result;
 use async_trait::async_trait;
-use hmac::digest::generic_array::typenum::Or;
 use std::iter::Iterator;
 use uuid::Uuid;
 
@@ -84,41 +83,41 @@ pub struct MarketOrder {
     pub amount: f64,
 }
 
-#[derive(Default)]
-pub struct MockExchange {
-    assets: Assets,
-    pub recorded_orders: Vec<MarketOrder>,
-}
-
-impl MockExchange {
-    pub fn new(assets: Assets) -> Self {
-        MockExchange {
-            assets,
-            ..Default::default()
-        }
-    }
-}
-
-#[async_trait]
-impl Exchange for MockExchange {
-    async fn event_stream(&self) -> Box<dyn Iterator<Item = Msg>> {
-        unimplemented!()
-    }
-
-    async fn place_market_order(&mut self, order: &MarketOrder) -> Result<Amount> {
-        self.recorded_orders.push(order.clone());
-        Ok(order.amount * 0.9)
-    }
-
-    async fn fetch_assets(&self) -> Result<Assets> {
-        Ok(self.assets.clone())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
+
+    #[derive(Default)]
+    pub struct MockExchange {
+        assets: Assets,
+        pub recorded_orders: Vec<MarketOrder>,
+    }
+
+    impl MockExchange {
+        pub fn new(assets: Assets) -> Self {
+            MockExchange {
+                assets,
+                ..Default::default()
+            }
+        }
+    }
+
+    #[async_trait]
+    impl Exchange for MockExchange {
+        async fn event_stream(&self) -> Box<dyn Iterator<Item = Msg>> {
+            unimplemented!()
+        }
+
+        async fn place_market_order(&mut self, order: &MarketOrder) -> Result<Amount> {
+            self.recorded_orders.push(order.clone());
+            Ok(order.amount * 0.9)
+        }
+
+        async fn fetch_assets(&self) -> Result<Assets> {
+            Ok(self.assets.clone())
+        }
+    }
 
     #[async_std::test]
     async fn mock_should_fetch_provided_assets() {
