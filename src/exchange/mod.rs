@@ -107,7 +107,7 @@ impl Exchange for MockExchange {
 
     async fn place_market_order(&mut self, order: &MarketOrder) -> Result<Amount> {
         self.recorded_orders.push(order.clone());
-        Ok(order.amount)
+        Ok(order.amount * 0.9)
     }
 
     async fn fetch_assets(&self) -> Result<Assets> {

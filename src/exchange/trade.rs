@@ -74,21 +74,20 @@ where
                 order_type,
                 correlation_id,
             };
-            return exchange
-                .place_market_order(&order)
-                .await
-                .map(|_| match order.order_type {
+            return exchange.place_market_order(&order).await.map(|amount| {
+                match order.order_type {
                     OrderType::Buy => vec![MsgData::Bought(Order {
-                        amount: order.amount,
+                        amount,
                         quote: order.quote,
                         base: order.base,
                     })],
                     OrderType::Sell => vec![MsgData::Sold(Order {
-                        amount: order.amount,
+                        amount,
                         quote: order.quote,
                         base: order.base,
                     })],
-                });
+                }
+            });
         }
     }
     Ok(vec![])
@@ -199,7 +198,7 @@ mod tests {
         let expected = vec![MsgData::Bought(Order {
             base: "BTC".into(),
             quote: "USDT".into(),
-            amount: 50.0,
+            amount: 45.0,
         })];
         assert_eq!(expected, actual)
     }
@@ -359,7 +358,7 @@ mod tests {
         let mut exchange = MockExchange::new(Assets {
             quote: None,
             base: Some(Asset {
-                amount: 0.0000001,
+                amount: 20.0,
                 name: "BTC".into(),
             }),
         });
@@ -370,7 +369,7 @@ mod tests {
         let expected = vec![MsgData::Sold(Order {
             base: "BTC".into(),
             quote: "USDT".into(),
-            amount: 0.0000001,
+            amount: 18.0,
         })];
         assert_eq!(expected, actual)
     }
