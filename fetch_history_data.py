@@ -30,7 +30,7 @@ def make_request(after):
 def fetch():
     after = int(datetime.utcnow().timestamp()) * 1000
     result = []
-    for _ in range(1):
+    for _ in range(1000):
         
         resp = make_request(after)
         
@@ -38,7 +38,6 @@ def fetch():
             print(resp.status_code)
             print(resp.json())
         for entry_tuple in resp.json()['data']:
-            print(entry_tuple)
             entry = dict(
                 time=int(entry_tuple[0]),
                 open=float(entry_tuple[1]),
@@ -50,6 +49,7 @@ def fetch():
             )
             result.append(entry)
             after = entry_tuple[0]
+    result.reverse()
     with open('data.json', 'w') as f:
         json.dump(result, f)
 
