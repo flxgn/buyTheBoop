@@ -46,7 +46,7 @@ impl Exchange for SimulatedExchange {
         let amount = order.amount * (1.0 - self.options.fee);
         match order.order_type {
             OrderType::Buy => {
-                let amount = amount * price;
+                let amount = if price > &0.0 { amount / price } else { 0.0 };
                 self.assets.quote = Some(Asset {
                     name: "USDT".into(),
                     amount: 0.0,
@@ -58,7 +58,7 @@ impl Exchange for SimulatedExchange {
                 Ok(amount)
             }
             OrderType::Sell => {
-                let amount = if price > &0.0 { amount / price } else { 0.0 };
+                let amount = amount * price;
                 self.assets.quote = Some(Asset {
                     name: "USDT".into(),
                     amount,
@@ -207,7 +207,7 @@ mod tests {
             vec![Msg {
                 data: MsgData::LivePriceUpdated(PriceUpdated {
                     pair_id: "BTC/USDT",
-                    price: 0.5,
+                    price: 2.0,
                     ..Default::default()
                 }),
                 metadata: MsgMetaData {
@@ -246,7 +246,7 @@ mod tests {
             vec![Msg {
                 data: MsgData::LivePriceUpdated(PriceUpdated {
                     pair_id: "BTC/USDT",
-                    price: 0.5,
+                    price: 2.0,
                     ..Default::default()
                 }),
                 metadata: MsgMetaData {
@@ -349,7 +349,7 @@ mod tests {
             ..Default::default()
         };
         let actual_amount = exchange.place_market_order(&order).await.unwrap();
-        assert_eq!(64.0, actual_amount)
+        assert_eq!(16.0, actual_amount)
     }
 
     #[async_std::test]
@@ -360,7 +360,7 @@ mod tests {
                 Msg {
                     data: MsgData::LivePriceUpdated(PriceUpdated {
                         pair_id: "BTC/USDT",
-                        price: 0.7,
+                        price: 0.5,
                         ..Default::default()
                     }),
                     metadata: MsgMetaData {
@@ -401,7 +401,7 @@ mod tests {
             ..Default::default()
         };
         let actual_amount = exchange.place_market_order(&order).await.unwrap();
-        assert_eq!(28.0, actual_amount)
+        assert_eq!(80.0, actual_amount)
     }
 
     #[async_std::test]
@@ -410,7 +410,7 @@ mod tests {
             vec![Msg {
                 data: MsgData::LivePriceUpdated(PriceUpdated {
                     pair_id: "BTC/USDT",
-                    price: 0.5,
+                    price: 2.0,
                     ..Default::default()
                 }),
                 metadata: MsgMetaData {
@@ -506,7 +506,7 @@ mod tests {
             vec![Msg {
                 data: MsgData::LivePriceUpdated(PriceUpdated {
                     pair_id: "BTC/USDT",
-                    price: 0.5,
+                    price: 2.0,
                     ..Default::default()
                 }),
                 metadata: MsgMetaData {
@@ -597,7 +597,7 @@ mod tests {
     }
 
     #[async_std::test]
-    async fn place_market_order_should_handle_zero_price_for_selling() {
+    async fn place_market_order_should_handle_zero_price_for_buying() {
         let mut exchange = SimulatedExchange::new(
             vec![Msg {
                 data: MsgData::LivePriceUpdated(PriceUpdated {
@@ -624,7 +624,7 @@ mod tests {
             base: "BTC".into(),
             quote: "USDT".into(),
             amount: 40.0,
-            order_type: OrderType::Sell,
+            order_type: OrderType::Buy,
             ..Default::default()
         };
         let actual_amount = exchange.place_market_order(&order).await.unwrap();
