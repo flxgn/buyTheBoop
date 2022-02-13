@@ -6,17 +6,17 @@ use async_trait::async_trait;
 use crossbeam::channel;
 use crossbeam::channel::unbounded;
 
-pub struct Processor<I, T>
+struct Processor<I, T>
 where
     I: IdProvider,
     T: TimeProvider,
 {
-    pub input: channel::Receiver<Msg>,
-    pub output: channel::Sender<Msg>,
-    pub is_filter: bool,
-    pub actor: Box<dyn Actor + Send>,
-    pub id_provider: I,
-    pub time_provider: T,
+    input: channel::Receiver<Msg>,
+    output: channel::Sender<Msg>,
+    is_filter: bool,
+    actor: Box<dyn Actor + Send>,
+    id_provider: I,
+    time_provider: T,
 }
 
 impl<I, T> Processor<I, T>
