@@ -6,6 +6,7 @@ pub trait IdProvider {
     fn new_random(&mut self) -> Uuid;
 }
 
+#[derive(Clone)]
 pub struct UuidProvider {}
 
 impl UuidProvider {
@@ -25,6 +26,7 @@ pub mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
 
+    #[derive(Clone)]
     pub struct MockUuidProvider {
         counter: u128,
     }

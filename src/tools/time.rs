@@ -6,6 +6,7 @@ pub trait TimeProvider {
     fn now(&mut self) -> Timestamp;
 }
 
+#[derive(Clone)]
 pub struct TimeProviderImpl {}
 
 impl TimeProviderImpl {
@@ -28,6 +29,7 @@ pub mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
 
+    #[derive(Clone)]
     pub struct MockTimeProvider {
         counter: u128,
     }
