@@ -7,24 +7,24 @@ use async_trait::async_trait;
 use super::{Asset, Exchange, MarketOrder, OrderType};
 
 #[derive(Debug, PartialEq)]
-pub struct Trader<'a, E>
+pub struct Trader<E>
 where
     E: Exchange,
 {
-    exchange: &'a mut E,
+    pub exchange: E,
 }
 
-impl<'a, E> Trader<'a, E>
+impl<E> Trader<E>
 where
     E: Exchange,
 {
-    pub fn new(exchange: &'a mut E) -> Self {
+    pub fn new(exchange: E) -> Self {
         Trader { exchange }
     }
 }
 
 #[async_trait]
-impl<'a, E> Actor for Trader<'a, E>
+impl<E> Actor for Trader<E>
 where
     E: Exchange + Send + Sync,
 {
@@ -33,7 +33,7 @@ where
             MsgData::Buy => {
                 let assets = self.exchange.fetch_assets().await?;
                 execute(
-                    self.exchange,
+                    &mut self.exchange,
                     assets.quote,
                     OrderType::Buy,
                     msg.metadata.correlation_id,
@@ -43,7 +43,7 @@ where
             MsgData::Sell => {
                 let assets = self.exchange.fetch_assets().await?;
                 execute(
-                    self.exchange,
+                    &mut self.exchange,
                     assets.base,
                     OrderType::Sell,
                     msg.metadata.correlation_id,
@@ -104,14 +104,14 @@ mod tests {
 
     #[async_std::test]
     async fn should_buy_max_amount_of_quote() {
-        let mut exchange = MockExchange::new(Assets {
+        let exchange = MockExchange::new(Assets {
             quote: Some(Asset {
                 amount: 40.0,
                 name: "USDT".into(),
             }),
             base: None,
         });
-        let mut trader = Trader::new(&mut exchange);
+        let mut trader = Trader::new(exchange);
 
         trader.act(&Msg::with_data(MsgData::Buy)).await.unwrap();
 
@@ -122,20 +122,20 @@ mod tests {
             order_type: OrderType::Buy,
             ..Default::default()
         }];
-        let actual = exchange.recorded_orders;
-        assert_eq!(expected, actual)
+        let actual = &trader.exchange.recorded_orders;
+        assert_eq!(&expected, actual)
     }
 
     #[async_std::test]
     async fn should_buy_different_max_amount_of_quote() {
-        let mut exchange = MockExchange::new(Assets {
+        let exchange = MockExchange::new(Assets {
             quote: Some(Asset {
                 amount: 50.0,
                 name: "USDT".into(),
             }),
             base: None,
         });
-        let mut trader = Trader::new(&mut exchange);
+        let mut trader = Trader::new(exchange);
 
         trader.act(&Msg::with_data(MsgData::Buy)).await.unwrap();
 
@@ -146,52 +146,52 @@ mod tests {
             order_type: OrderType::Buy,
             ..Default::default()
         }];
-        let actual = exchange.recorded_orders;
-        assert_eq!(expected, actual)
+        let actual = &trader.exchange.recorded_orders;
+        assert_eq!(&expected, actual)
     }
 
     #[async_std::test]
     async fn should_not_buy_quote_when_no_assets() {
-        let mut exchange = MockExchange::new(Assets {
+        let exchange = MockExchange::new(Assets {
             ..Default::default()
         });
-        let mut trader = Trader::new(&mut exchange);
+        let mut trader = Trader::new(exchange);
 
         trader.act(&Msg::with_data(MsgData::Buy)).await.unwrap();
 
         let expected: Vec<MarketOrder> = vec![];
-        let actual = exchange.recorded_orders;
-        assert_eq!(expected, actual)
+        let actual = &trader.exchange.recorded_orders;
+        assert_eq!(&expected, actual)
     }
 
     #[async_std::test]
     async fn should_not_buy_quote_when_zero() {
-        let mut exchange = MockExchange::new(Assets {
+        let exchange = MockExchange::new(Assets {
             quote: Some(Asset {
                 amount: 0.0,
                 name: "USDT".into(),
             }),
             base: None,
         });
-        let mut trader = Trader::new(&mut exchange);
+        let mut trader = Trader::new(exchange);
 
         trader.act(&Msg::with_data(MsgData::Buy)).await.unwrap();
 
         let expected: Vec<MarketOrder> = vec![];
-        let actual = exchange.recorded_orders;
-        assert_eq!(expected, actual)
+        let actual = &trader.exchange.recorded_orders;
+        assert_eq!(&expected, actual)
     }
 
     #[async_std::test]
     async fn should_emit_bought_order_event() {
-        let mut exchange = MockExchange::new(Assets {
+        let exchange = MockExchange::new(Assets {
             quote: Some(Asset {
                 amount: 50.0,
                 name: "USDT".into(),
             }),
             base: None,
         });
-        let mut trader = Trader::new(&mut exchange);
+        let mut trader = Trader::new(exchange);
 
         let actual = trader.act(&Msg::with_data(MsgData::Buy)).await.unwrap();
 
@@ -205,14 +205,14 @@ mod tests {
 
     #[async_std::test]
     async fn should_sell_max_amount_of_base() {
-        let mut exchange = MockExchange::new(Assets {
+        let exchange = MockExchange::new(Assets {
             quote: None,
             base: Some(Asset {
                 amount: 0.0000001,
                 name: "BTC".into(),
             }),
         });
-        let mut trader = Trader::new(&mut exchange);
+        let mut trader = Trader::new(exchange);
 
         trader.act(&Msg::with_data(MsgData::Sell)).await.unwrap();
 
@@ -223,20 +223,20 @@ mod tests {
             order_type: OrderType::Sell,
             ..Default::default()
         }];
-        let actual = exchange.recorded_orders;
-        assert_eq!(expected, actual)
+        let actual = &trader.exchange.recorded_orders;
+        assert_eq!(&expected, actual)
     }
 
     #[async_std::test]
     async fn should_sell_different_max_amount_of_base() {
-        let mut exchange = MockExchange::new(Assets {
+        let exchange = MockExchange::new(Assets {
             quote: None,
             base: Some(Asset {
                 amount: 0.0002,
                 name: "BTC".into(),
             }),
         });
-        let mut trader = Trader::new(&mut exchange);
+        let mut trader = Trader::new(exchange);
 
         trader.act(&Msg::with_data(MsgData::Sell)).await.unwrap();
 
@@ -247,52 +247,52 @@ mod tests {
             order_type: OrderType::Sell,
             ..Default::default()
         }];
-        let actual = exchange.recorded_orders;
-        assert_eq!(expected, actual)
+        let actual = &trader.exchange.recorded_orders;
+        assert_eq!(&expected, actual)
     }
 
     #[async_std::test]
     async fn should_not_sell_when_no_assets() {
-        let mut exchange = MockExchange::new(Assets {
+        let exchange = MockExchange::new(Assets {
             ..Default::default()
         });
-        let mut trader = Trader::new(&mut exchange);
+        let mut trader = Trader::new(exchange);
 
         trader.act(&Msg::with_data(MsgData::Sell)).await.unwrap();
 
         let expected: Vec<MarketOrder> = vec![];
-        let actual = exchange.recorded_orders;
-        assert_eq!(expected, actual)
+        let actual = &trader.exchange.recorded_orders;
+        assert_eq!(&expected, actual)
     }
 
     #[async_std::test]
     async fn should_not_sell_when_base_zero() {
-        let mut exchange = MockExchange::new(Assets {
+        let exchange = MockExchange::new(Assets {
             quote: None,
             base: Some(Asset {
                 amount: 0.0,
                 name: "BTC".into(),
             }),
         });
-        let mut trader = Trader::new(&mut exchange);
+        let mut trader = Trader::new(exchange);
 
         trader.act(&Msg::with_data(MsgData::Sell)).await.unwrap();
 
         let expected: Vec<MarketOrder> = vec![];
-        let actual = exchange.recorded_orders;
-        assert_eq!(expected, actual)
+        let actual = &trader.exchange.recorded_orders;
+        assert_eq!(&expected, actual)
     }
 
     #[async_std::test]
     async fn should_set_correlation_id() {
-        let mut exchange = MockExchange::new(Assets {
+        let exchange = MockExchange::new(Assets {
             quote: None,
             base: Some(Asset {
                 amount: 0.0002,
                 name: "BTC".into(),
             }),
         });
-        let mut trader = Trader::new(&mut exchange);
+        let mut trader = Trader::new(exchange);
         let uuid = Uuid::from_u128(0);
 
         trader
@@ -314,20 +314,20 @@ mod tests {
             correlation_id: uuid,
             ..Default::default()
         }];
-        let actual = exchange.recorded_orders;
-        assert_eq!(expected, actual)
+        let actual = &trader.exchange.recorded_orders;
+        assert_eq!(&expected, actual)
     }
 
     #[async_std::test]
     async fn should_set_different_correlation_id() {
-        let mut exchange = MockExchange::new(Assets {
+        let exchange = MockExchange::new(Assets {
             quote: None,
             base: Some(Asset {
                 amount: 0.0002,
                 name: "BTC".into(),
             }),
         });
-        let mut trader = Trader::new(&mut exchange);
+        let mut trader = Trader::new(exchange);
         let uuid = Uuid::from_u128(1);
 
         trader
@@ -349,20 +349,20 @@ mod tests {
             correlation_id: uuid,
             ..Default::default()
         }];
-        let actual = exchange.recorded_orders;
-        assert_eq!(expected, actual)
+        let actual = &trader.exchange.recorded_orders;
+        assert_eq!(&expected, actual)
     }
 
     #[async_std::test]
     async fn should_emit_sold_order_event() {
-        let mut exchange = MockExchange::new(Assets {
+        let exchange = MockExchange::new(Assets {
             quote: None,
             base: Some(Asset {
                 amount: 20.0,
                 name: "BTC".into(),
             }),
         });
-        let mut trader = Trader::new(&mut exchange);
+        let mut trader = Trader::new(exchange);
 
         let actual = trader.act(&Msg::with_data(MsgData::Sell)).await.unwrap();
 

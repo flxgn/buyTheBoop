@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 pub type Price = f64;
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct SimulatedExchange {
     event_stream: Vec<Msg>,
     assets: Assets,
