@@ -1,3 +1,5 @@
 .idea/*
 /target
 **/*.rs.bk
+local.env
+data.json
