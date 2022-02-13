@@ -16,6 +16,7 @@ struct TimePricePoint {
 pub struct SlidingAverage {
     pub window_millis: i128,
     events: Vec<TimePricePoint>,
+    active: bool,
 }
 
 impl SlidingAverage {
@@ -23,6 +24,7 @@ impl SlidingAverage {
         SlidingAverage {
             window_millis,
             events: vec![],
+            active: false
         }
     }
 }
@@ -36,6 +38,7 @@ impl Actor for SlidingAverage {
                     datetime: e.datetime,
                     price: e.price,
                 });
+                let before_len = self.events.len();
                 self.events
                     .retain(|i| i.datetime >= e.datetime - self.window_millis as i128);
                 let sum: f64 = self.events.iter().map(|e| e.price).sum();
@@ -45,7 +48,10 @@ impl Actor for SlidingAverage {
                     price: sum / self.events.len() as f64,
                     ..Default::default()
                 };
-                if self.events.len() > 1 {
+                if before_len > self.events.len() {
+                    self.active = true;
+                }
+                if self.active {
                     vec![MsgData::AveragePriceUpdated(avg)]
                 } else {
                     vec![]
@@ -75,7 +81,7 @@ mod tests {
         }));
         let e2 = Msg::with_data(MsgData::LivePriceUpdated(PriceUpdated {
             pair_id: "pair_id",
-            datetime: SECOND,
+            datetime: SECOND + 1,
             price: 2.0,
             ..Default::default()
         }));
@@ -83,8 +89,8 @@ mod tests {
         let actual_e = actor.act(&e2).await.unwrap();
         let expected_e = vec![MsgData::AveragePriceUpdated(PriceUpdated {
             pair_id: "pair_id",
-            datetime: SECOND,
-            price: 1.5,
+            datetime: SECOND + 1,
+            price: 2.0,
             ..Default::default()
         })];
         assert_eq!(expected_e, actual_e)
@@ -109,21 +115,35 @@ mod tests {
             ..Default::default()
         }));
         actor.act(&e1).await.unwrap();
-        let actual_e1 = actor.act(&e2).await.unwrap();
-        let actual_e2 = actor.act(&e3).await.unwrap();
-
-        let expected_e1 = vec![MsgData::AveragePriceUpdated(PriceUpdated {
-            datetime: SECOND,
-            price: 1.5,
-            ..Default::default()
-        })];
-        assert_eq!(expected_e1, actual_e1);
+        actor.act(&e2).await.unwrap();
+        let actual = actor.act(&e3).await.unwrap();
 
         let expected_e2 = vec![MsgData::AveragePriceUpdated(PriceUpdated {
             datetime: SECOND * 2,
             price: 2.5,
             ..Default::default()
         })];
-        assert_eq!(expected_e2, actual_e2);
+        assert_eq!(expected_e2, actual);
+    }
+
+    #[async_std::test]
+    async fn actor_should_not_emit_average_price_update_if_window_not_full() {
+        let mut actor = SlidingAverage::new(SECOND * 2);
+        let e1 = Msg::with_data(MsgData::LivePriceUpdated(PriceUpdated {
+            pair_id: "pair_id",
+            datetime: 0,
+            price: 1.0,
+            ..Default::default()
+        }));
+        let e2 = Msg::with_data(MsgData::LivePriceUpdated(PriceUpdated {
+            pair_id: "pair_id",
+            datetime: SECOND,
+            price: 2.0,
+            ..Default::default()
+        }));
+        actor.act(&e1).await.unwrap();
+        let actual_e = actor.act(&e2).await.unwrap();
+        let expected_e: Vec<MsgData> = vec![];
+        assert_eq!(expected_e, actual_e)
     }
 }
