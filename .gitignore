@@ -2,4 +2,7 @@
 /target
 **/*.rs.bk
 local.env
-data.json
+data*.json
+.vscode
+images/*
+.DS_Store
