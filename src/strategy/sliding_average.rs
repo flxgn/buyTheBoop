@@ -3,7 +3,7 @@ use crate::messaging::processor::Actor;
 use anyhow::Result;
 use async_trait::async_trait;
 
-pub type Timestamp = i128;
+pub type Timestamp = u128;
 pub type Price = f64;
 
 #[derive(Debug, PartialEq, Clone, Default)]
@@ -14,13 +14,13 @@ struct TimePricePoint {
 
 #[derive(Debug, PartialEq, Clone, Default)]
 pub struct SlidingAverage {
-    pub window_millis: i128,
+    pub window_millis: u128,
     events: Vec<TimePricePoint>,
     active: bool,
 }
 
 impl SlidingAverage {
-    pub fn new(window_millis: i128) -> Self {
+    pub fn new(window_millis: u128) -> Self {
         SlidingAverage {
             window_millis,
             events: vec![],
@@ -40,7 +40,7 @@ impl Actor for SlidingAverage {
                 });
                 let before_len = self.events.len();
                 self.events
-                    .retain(|i| i.datetime >= e.datetime - self.window_millis as i128);
+                    .retain(|i| i.datetime as i128 >= e.datetime as i128 - self.window_millis as i128);
                 let sum: f64 = self.events.iter().map(|e| e.price).sum();
                 let avg = PriceUpdated {
                     pair_id: e.pair_id,
@@ -68,7 +68,7 @@ mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
 
-    const SECOND: i128 = 1_000;
+    const SECOND: u128 = 1_000;
 
     #[async_std::test]
     async fn actor_should_emit_average_price_update() {

@@ -281,10 +281,15 @@ impl Iterator for EventStream {
                                 id: uuid,
                                 causation_id: uuid,
                                 correlation_id: uuid,
-                                created: SystemTime::now()
+                                creation_time: SystemTime::now()
                                     .duration_since(UNIX_EPOCH)
                                     .expect("time went backwards")
                                     .as_micros(),
+                                correlation_time: SystemTime::now()
+                                    .duration_since(UNIX_EPOCH)
+                                    .expect("time went backwards")
+                                    .as_millis(),
+                                correlation_price: 0.0,
                             },
                         })
                     } else {
@@ -318,10 +323,15 @@ impl Iterator for EventStream {
                                 id: uuid,
                                 causation_id: uuid,
                                 correlation_id: uuid,
-                                created: SystemTime::now()
+                                creation_time: SystemTime::now()
                                     .duration_since(UNIX_EPOCH)
                                     .expect("time went backwards")
                                     .as_micros(),
+                                correlation_time: SystemTime::now()
+                                    .duration_since(UNIX_EPOCH)
+                                    .expect("time went backwards")
+                                    .as_micros(),
+                                correlation_price: 0.0,
                             },
                         })
                     } else {

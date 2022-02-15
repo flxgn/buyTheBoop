@@ -59,7 +59,7 @@ mod tests {
     use crate::messaging::message::PriceUpdated;
     use pretty_assertions::assert_eq;
 
-    const SECOND: i128 = 1_000;
+    const SECOND: u128 = 1_000;
 
     #[async_std::test]
     async fn actor_should_emit_nothing_if_only_average_price_updated() {

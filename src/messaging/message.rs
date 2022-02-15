@@ -1,6 +1,6 @@
 use uuid::Uuid;
 
-pub type Timestamp = i128;
+pub type Timestamp = u128;
 pub type AccurateTimestamp = u128;
 pub type Price = f64;
 pub type PairId = &'static str;
@@ -41,8 +41,10 @@ pub enum MsgData {
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct MsgMetaData {
     pub id: MessageId,
-    pub created: AccurateTimestamp,
+    pub correlation_time: Timestamp,
+    pub creation_time: AccurateTimestamp,
     pub correlation_id: MessageId,
+    pub correlation_price: Price,
     pub causation_id: MessageId,
 }
 

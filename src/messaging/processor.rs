@@ -40,9 +40,11 @@ where
                     data: msg,
                     metadata: MsgMetaData {
                         id: self.id_provider.new_random(),
-                        created: self.time_provider.now(),
+                        creation_time: self.time_provider.now(),
+                        correlation_time: e.metadata.correlation_time,
                         correlation_id: e.metadata.correlation_id,
                         causation_id: e.metadata.id,
+                        correlation_price: e.metadata.correlation_price,
                     },
                 })
                 .collect();
@@ -220,7 +222,9 @@ mod tests {
                 id: uuid::Uuid::from_u128(8),
                 causation_id: uuid::Uuid::from_u128(7),
                 correlation_id: uuid::Uuid::from_u128(7),
-                created: 0,
+                correlation_price: 1.0,
+                correlation_time: 1,
+                creation_time: 0,
             },
         };
 
@@ -234,7 +238,9 @@ mod tests {
                 id: uuid::Uuid::from_u128(0),
                 causation_id: uuid::Uuid::from_u128(8),
                 correlation_id: uuid::Uuid::from_u128(7),
-                created: 0,
+                correlation_price: 1.0,
+                correlation_time: 1,
+                creation_time: 0,
             },
         };
         let actual_msg = out_r.recv().unwrap();
@@ -250,7 +256,9 @@ mod tests {
                 id: uuid::Uuid::from_u128(7),
                 causation_id: uuid::Uuid::from_u128(6),
                 correlation_id: uuid::Uuid::from_u128(6),
-                created: 0,
+                correlation_price: 1.0,
+                creation_time: 0,
+                correlation_time: 1,
             },
         };
         in_s.send(msg).unwrap();
@@ -262,7 +270,9 @@ mod tests {
                 id: uuid::Uuid::from_u128(0),
                 causation_id: uuid::Uuid::from_u128(7),
                 correlation_id: uuid::Uuid::from_u128(6),
-                created: 0,
+                correlation_price: 1.0,
+                creation_time: 0,
+                correlation_time: 1,
             },
         };
         let actual_msg = out_r.recv().unwrap();
@@ -338,7 +348,7 @@ mod tests {
                     data: MsgData::Buy,
                     metadata: MsgMetaData {
                         id: Uuid::from_u128(1),
-                        created: 1,
+                        creation_time: 1,
                         ..Default::default()
                     }
                 },
