@@ -1,8 +1,9 @@
 use super::{Amount, Asset, Assets, Exchange, ExchangeOptions, MarketOrder, OrderType};
-use crate::messaging::message::{Msg, MsgData};
+use crate::{messaging::message::{Msg, MsgData, PriceUpdated, MsgMetaData}, tools::time::{TimeProviderImpl, TimeProvider}};
 use anyhow::Result;
 use async_trait::async_trait;
-use std::collections::HashMap;
+use serde::Deserialize;
+use std::{collections::HashMap, fs};
 use uuid::Uuid;
 
 pub type Price = f64;
@@ -76,6 +77,61 @@ impl Exchange for SimulatedExchange {
         Ok(self.assets.clone())
     }
 }
+
+
+#[derive(Deserialize)]
+struct Candle {
+    time: u128,
+    close: f64,
+}
+
+pub fn create_simulated_exchange() -> SimulatedExchange {
+    let mut time = TimeProviderImpl {};
+    let file = fs::File::open("data_5min.json").expect("file should open read only");
+    let candles: Vec<Candle> =
+        serde_json::from_reader(file).expect("file should be proper JSON");
+
+    let mut event_stream = vec![];
+    for candle in candles {
+        let message_id = Uuid::new_v4();
+        event_stream.push(Msg {
+            data: MsgData::LivePriceUpdated(PriceUpdated {
+                datetime: candle.time,
+                pair_id: "BTC/USDT",
+                price: candle.close,
+            }),
+            metadata: MsgMetaData {
+                id: message_id,
+                correlation_id: message_id,
+                causation_id: message_id,
+                creation_time: time.now(),
+                correlation_time: candle.time,
+                correlation_price: candle.close,
+            },
+        });
+    }
+    event_stream.push(Msg {
+        data: MsgData::Shutdown,
+        metadata: MsgMetaData {
+            ..Default::default()
+        },
+    });
+    SimulatedExchange::new(
+        event_stream,
+        Assets {
+            quote: Some(Asset {
+                amount: 1000.0,
+                name: "USDT".into(),
+            }),
+            base: None,
+        },
+        ExchangeOptions {
+            fee: 0.0,
+            ..Default::default()
+        },
+    )
+}
+
 
 #[cfg(test)]
 mod tests {
