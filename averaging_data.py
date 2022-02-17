@@ -12,7 +12,7 @@ def run():
         data = json.load(f)
 
     result = []
-    chunk_size = 5
+    chunk_size = 15
     for entry_chunk in chunks(data, chunk_size):
         summation = 0
         last_entry = {}
@@ -22,7 +22,7 @@ def run():
         last_entry['close'] = summation / chunk_size
         result.append(last_entry)
 
-    with open('data_5min.json', 'w') as f:
+    with open('data_15min.json', 'w') as f:
         json.dump(result, f)
 
 

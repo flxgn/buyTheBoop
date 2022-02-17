@@ -1,5 +1,8 @@
 use super::{Amount, Asset, Assets, Exchange, ExchangeOptions, MarketOrder, OrderType};
-use crate::{messaging::message::{Msg, MsgData, PriceUpdated, MsgMetaData}, tools::time::{TimeProviderImpl, TimeProvider}};
+use crate::{
+    messaging::message::{Msg, MsgData, MsgMetaData, PriceUpdated},
+    tools::time::{TimeProvider, TimeProviderImpl},
+};
 use anyhow::Result;
 use async_trait::async_trait;
 use serde::Deserialize;
@@ -78,18 +81,16 @@ impl Exchange for SimulatedExchange {
     }
 }
 
-
 #[derive(Deserialize)]
 struct Candle {
     time: u128,
     close: f64,
 }
 
-pub fn create_simulated_exchange() -> SimulatedExchange {
+pub fn create_simulated_exchange(fee: f64, file: &str) -> SimulatedExchange {
     let mut time = TimeProviderImpl {};
-    let file = fs::File::open("data_5min.json").expect("file should open read only");
-    let candles: Vec<Candle> =
-        serde_json::from_reader(file).expect("file should be proper JSON");
+    let file = fs::File::open(file).expect("file should open read only");
+    let candles: Vec<Candle> = serde_json::from_reader(file).expect("file should be proper JSON");
 
     let mut event_stream = vec![];
     for candle in candles {
@@ -126,12 +127,11 @@ pub fn create_simulated_exchange() -> SimulatedExchange {
             base: None,
         },
         ExchangeOptions {
-            fee: 0.0,
+            fee: fee,
             ..Default::default()
         },
     )
 }
-
 
 #[cfg(test)]
 mod tests {

@@ -28,11 +28,13 @@ impl Actor for SimpleCrossover {
                     .latest_average
                     .map(|avg| {
                         if e.price > avg * (1.0 + self.offset)
-                            && (self.latest_live.is_none() || self.latest_live < Some(avg * (1.0 + self.offset)))
+                            && (self.latest_live.is_none()
+                                || self.latest_live < Some(avg * (1.0 + self.offset)))
                         {
                             vec![MsgData::Buy]
                         } else if e.price < avg * (1.0 - self.offset)
-                            && (self.latest_live.is_none() || self.latest_live > Some(avg * (1.0 - self.offset)))
+                            && (self.latest_live.is_none()
+                                || self.latest_live > Some(avg * (1.0 - self.offset)))
                         {
                             vec![MsgData::Sell]
                         } else {
@@ -486,5 +488,4 @@ mod tests {
         let expected: Vec<MsgData> = vec![MsgData::Sell];
         assert_eq!(expected, actual)
     }
-
 }

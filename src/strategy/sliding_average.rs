@@ -24,7 +24,7 @@ impl SlidingAverage {
         SlidingAverage {
             window_millis,
             events: vec![],
-            active: false
+            active: false,
         }
     }
 }
@@ -39,8 +39,9 @@ impl Actor for SlidingAverage {
                     price: e.price,
                 });
                 let before_len = self.events.len();
-                self.events
-                    .retain(|i| i.datetime as i128 >= e.datetime as i128 - self.window_millis as i128);
+                self.events.retain(|i| {
+                    i.datetime as i128 >= e.datetime as i128 - self.window_millis as i128
+                });
                 let sum: f64 = self.events.iter().map(|e| e.price).sum();
                 let avg = PriceUpdated {
                     pair_id: e.pair_id,

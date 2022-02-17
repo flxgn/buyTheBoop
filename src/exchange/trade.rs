@@ -95,7 +95,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::exchange::{Assets, tests::MockExchange};
+    use crate::exchange::{tests::MockExchange, Assets};
 
     use super::*;
     use crate::messaging::message::MsgMetaData;
