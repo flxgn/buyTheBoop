@@ -3,28 +3,21 @@ use crate::messaging::processor::Actor;
 use anyhow::Result;
 use async_trait::async_trait;
 
-pub type Timestamp = u128;
-pub type Price = f64;
-
-#[derive(Debug, PartialEq, Clone, Default)]
-struct TimePricePoint {
-    datetime: Timestamp,
-    price: Price,
-}
-
 #[derive(Debug, PartialEq, Clone, Default)]
 pub struct SlidingAverage {
     pub window_millis: u128,
-    events: Vec<TimePricePoint>,
-    active: bool,
+    latest_average: Option<f64>,
+    counted_price_points: u16,
+    min_price_points: u16,
 }
 
 impl SlidingAverage {
-    pub fn new(window_millis: u128) -> Self {
+    pub fn new(interval_millis: u128, window_millis: u128) -> Self {
         SlidingAverage {
             window_millis,
-            events: vec![],
-            active: false,
+            latest_average: None,
+            counted_price_points: 0,
+            min_price_points: (window_millis / interval_millis) as u16,
         }
     }
 }
@@ -34,27 +27,20 @@ impl Actor for SlidingAverage {
     async fn act(&mut self, msg: &Msg) -> Result<Vec<MsgData>> {
         let res = match &msg.data {
             MsgData::LivePriceUpdated(e) => {
-                self.events.push(TimePricePoint {
-                    datetime: e.datetime,
-                    price: e.price,
-                });
-                let before_len = self.events.len();
-                self.events.retain(|i| {
-                    i.datetime as i128 >= e.datetime as i128 - self.window_millis as i128
-                });
-                let sum: f64 = self.events.iter().map(|e| e.price).sum();
-                let avg = PriceUpdated {
-                    pair_id: e.pair_id,
-                    datetime: e.datetime,
-                    price: sum / self.events.len() as f64,
-                    ..Default::default()
-                };
-                if before_len > self.events.len() {
-                    self.active = true;
-                }
-                if self.active {
-                    vec![MsgData::AveragePriceUpdated(avg)]
+                let latest_average = self.latest_average.unwrap_or(e.price);
+                let current_average = (e.price - latest_average)
+                    * (2.0 / (self.min_price_points + 1) as f64)
+                    + latest_average;
+                self.latest_average = Some(current_average);
+                if self.counted_price_points >= self.min_price_points {
+                    vec![MsgData::AveragePriceUpdated(PriceUpdated {
+                        pair_id: e.pair_id,
+                        datetime: e.datetime,
+                        price: current_average,
+                        ..Default::default()
+                    })]
                 } else {
+                    self.counted_price_points += 1;
                     vec![]
                 }
             }
@@ -73,7 +59,7 @@ mod tests {
 
     #[async_std::test]
     async fn actor_should_emit_average_price_update() {
-        let mut actor = SlidingAverage::new(SECOND);
+        let mut actor = SlidingAverage::new(SECOND, SECOND);
         let e1 = Msg::with_data(MsgData::LivePriceUpdated(PriceUpdated {
             pair_id: "pair_id",
             datetime: 0,
@@ -99,7 +85,7 @@ mod tests {
 
     #[async_std::test]
     async fn actor_should_calculate_prices_from_given_sliding_window() {
-        let mut actor = SlidingAverage::new(SECOND);
+        let mut actor = SlidingAverage::new(SECOND, SECOND * 2);
         let e1 = Msg::with_data(MsgData::LivePriceUpdated(PriceUpdated {
             datetime: 0,
             price: 1.0,
@@ -107,12 +93,12 @@ mod tests {
         }));
         let e2 = Msg::with_data(MsgData::LivePriceUpdated(PriceUpdated {
             datetime: SECOND,
-            price: 2.0,
+            price: 2.2,
             ..Default::default()
         }));
         let e3 = Msg::with_data(MsgData::LivePriceUpdated(PriceUpdated {
             datetime: SECOND * 2,
-            price: 3.0,
+            price: 4.5,
             ..Default::default()
         }));
         actor.act(&e1).await.unwrap();
@@ -121,7 +107,7 @@ mod tests {
 
         let expected_e2 = vec![MsgData::AveragePriceUpdated(PriceUpdated {
             datetime: SECOND * 2,
-            price: 2.5,
+            price: 3.6,
             ..Default::default()
         })];
         assert_eq!(expected_e2, actual);
@@ -129,7 +115,7 @@ mod tests {
 
     #[async_std::test]
     async fn actor_should_not_emit_average_price_update_if_window_not_full() {
-        let mut actor = SlidingAverage::new(SECOND * 2);
+        let mut actor = SlidingAverage::new(SECOND, SECOND * 2);
         let e1 = Msg::with_data(MsgData::LivePriceUpdated(PriceUpdated {
             pair_id: "pair_id",
             datetime: 0,

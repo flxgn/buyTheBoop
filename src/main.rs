@@ -21,8 +21,9 @@ extern crate simple_error;
 #[async_std::main]
 async fn main() {
     tools::logging::setup();
-    let out_r = run_simulation(0.008, 1680).await;
-    draw_graph(out_r, 0.008)
+    let out_r = run_simulation(0.005, 1140, 0.0008).await;
+    draw_graph(out_r, 0.008);
+    // run_enumeration().await;
 }
 
 async fn run_enumeration() {
@@ -32,7 +33,7 @@ async fn run_enumeration() {
         println!("{}", offset);
         for averageing_window in (60..1800).step_by(60) {
             let offset = f64::from(offset) * 0.001;
-            let out_receiver = run_simulation(offset, averageing_window).await;
+            let out_receiver = run_simulation(offset, averageing_window, 0.0008).await;
 
             let mut assets = Assets {
                 quote: Some(Asset {
@@ -81,8 +82,10 @@ async fn run_enumeration() {
     println!("{:#?}", results);
 }
 
-async fn run_simulation(offset: f64, averaging_window_minutes: u128) -> channel::Receiver<Msg> {
-    let exchange = create_simulated_exchange(0.001, "data_5min.json");
+const PRICE_UPDATE_INTERVAL: u128 = 300_000;
+
+async fn run_simulation(offset: f64, averaging_window_minutes: u128, fee: f64) -> channel::Receiver<Msg> {
+    let exchange = create_simulated_exchange(fee, "data_5min.json");
 
     let (sender, in_receiver) = unbounded();
     for event in exchange.event_stream().await {
@@ -90,7 +93,7 @@ async fn run_simulation(offset: f64, averaging_window_minutes: u128) -> channel:
     }
 
     ActorChain::new(TimeProviderImpl::new(), UuidProvider::new(), in_receiver)
-        .add(SlidingAverage::new(averaging_window_minutes * 60 * 1000))
+        .add(SlidingAverage::new(PRICE_UPDATE_INTERVAL, averaging_window_minutes * 60 * 1000))
         .add(SimpleCrossover::new(offset))
         .add(Trader::new(exchange))
         .start()
@@ -202,7 +205,7 @@ fn draw_graph(out_receiver: channel::Receiver<Msg>, offset: f64) {
         }
     }
 
-    let root_area = SVGBackend::new("images/2.11.svg", (3600, 800)).into_drawing_area();
+    let root_area = SVGBackend::new("images/exponential.svg", (3600, 800)).into_drawing_area();
     root_area.fill(&WHITE).unwrap();
     let (upper, lower) = root_area.split_vertically((70).percent());
 
