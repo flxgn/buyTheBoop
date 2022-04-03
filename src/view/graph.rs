@@ -109,7 +109,7 @@ pub fn draw_graph(out_receiver: channel::Receiver<Msg>, offset: f64) {
         }
     }
 
-    let root_area = SVGBackend::new("images/exponential.svg", (3600, 800)).into_drawing_area();
+    let root_area = SVGBackend::new("result.svg", (3600, 800)).into_drawing_area();
     root_area.fill(&WHITE).unwrap();
     let (upper, lower) = root_area.split_vertically((70).percent());
 

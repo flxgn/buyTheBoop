@@ -6,3 +6,4 @@ data*.json
 .vscode
 images/*
 .DS_Store
+result.svg
