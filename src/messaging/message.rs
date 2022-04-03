@@ -4,7 +4,6 @@ pub type Timestamp = u128;
 pub type AccurateTimestamp = u128;
 pub type Price = f64;
 pub type PairId = &'static str;
-pub type EventId = Uuid;
 pub type MessageId = Uuid;
 
 #[derive(Debug, PartialEq, Clone, Default)]
@@ -12,12 +11,6 @@ pub struct PriceUpdated {
     pub pair_id: PairId,
     pub datetime: Timestamp,
     pub price: Price,
-}
-
-#[derive(Debug, PartialEq, Copy, Clone)]
-pub enum OrderType {
-    Buy,
-    Sell,
 }
 
 #[derive(PartialEq, Debug, Clone)]

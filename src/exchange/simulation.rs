@@ -12,14 +12,20 @@ use uuid::Uuid;
 pub type Price = f64;
 
 #[derive(Default, Clone)]
-pub struct SimulatedExchange {
+pub struct ExchangeSimulation {
     event_stream: Vec<Msg>,
     assets: Assets,
     prices: HashMap<Uuid, Price>,
     options: ExchangeOptions,
 }
 
-impl SimulatedExchange {
+#[derive(Deserialize)]
+struct Candle {
+    time: u128,
+    close: f64,
+}
+
+impl ExchangeSimulation {
     pub fn new(event_stream: Vec<Msg>, assets: Assets, options: ExchangeOptions) -> Self {
         let mut prices = HashMap::new();
         for event in &event_stream {
@@ -27,17 +33,58 @@ impl SimulatedExchange {
                 prices.insert(event.metadata.correlation_id, price_updated.price);
             }
         }
-        SimulatedExchange {
+        ExchangeSimulation {
             event_stream,
             assets,
             prices,
             options,
         }
     }
+
+    pub fn new_from_file(
+        file: &str,
+        starting_quote: Asset,
+        options: ExchangeOptions,
+    ) -> ExchangeSimulation {
+        let mut time = TimeProviderImpl {};
+        let file = fs::File::open(file).expect("file should open read only");
+        let candles: Vec<Candle> =
+            serde_json::from_reader(file).expect("file should be proper JSON");
+
+        let mut event_stream = vec![];
+        for candle in candles {
+            let message_id = Uuid::new_v4();
+            event_stream.push(Msg {
+                data: MsgData::LivePriceUpdated(PriceUpdated {
+                    datetime: candle.time,
+                    pair_id: "BTC/USDT",
+                    price: candle.close,
+                }),
+                metadata: MsgMetaData {
+                    id: message_id,
+                    correlation_id: message_id,
+                    causation_id: message_id,
+                    creation_time: time.now(),
+                    correlation_time: candle.time,
+                    correlation_price: candle.close,
+                },
+            });
+        }
+        event_stream.push(Msg {
+            data: MsgData::Shutdown,
+            metadata: MsgMetaData {
+                ..Default::default()
+            },
+        });
+        ExchangeSimulation::new(event_stream, Assets {
+            quote: Some(starting_quote),
+            base: None,
+        }, options)
+    }
 }
 
 #[async_trait]
-impl Exchange for SimulatedExchange {
+impl Exchange for ExchangeSimulation {
     async fn event_stream(&self) -> Box<dyn Iterator<Item = Msg>> {
         Box::new(self.event_stream.clone().into_iter())
     }
@@ -81,58 +128,6 @@ impl Exchange for SimulatedExchange {
     }
 }
 
-#[derive(Deserialize)]
-struct Candle {
-    time: u128,
-    close: f64,
-}
-
-pub fn create_simulated_exchange(fee: f64, file: &str) -> SimulatedExchange {
-    let mut time = TimeProviderImpl {};
-    let file = fs::File::open(file).expect("file should open read only");
-    let candles: Vec<Candle> = serde_json::from_reader(file).expect("file should be proper JSON");
-
-    let mut event_stream = vec![];
-    for candle in candles {
-        let message_id = Uuid::new_v4();
-        event_stream.push(Msg {
-            data: MsgData::LivePriceUpdated(PriceUpdated {
-                datetime: candle.time,
-                pair_id: "BTC/USDT",
-                price: candle.close,
-            }),
-            metadata: MsgMetaData {
-                id: message_id,
-                correlation_id: message_id,
-                causation_id: message_id,
-                creation_time: time.now(),
-                correlation_time: candle.time,
-                correlation_price: candle.close,
-            },
-        });
-    }
-    event_stream.push(Msg {
-        data: MsgData::Shutdown,
-        metadata: MsgMetaData {
-            ..Default::default()
-        },
-    });
-    SimulatedExchange::new(
-        event_stream,
-        Assets {
-            quote: Some(Asset {
-                amount: 1000.0,
-                name: "USDT".into(),
-            }),
-            base: None,
-        },
-        ExchangeOptions {
-            fee: fee,
-            ..Default::default()
-        },
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -146,7 +141,7 @@ mod tests {
             pair_id: "1",
             ..Default::default()
         }))];
-        let exchange = SimulatedExchange::new(
+        let exchange = ExchangeSimulation::new(
             expected_stream.clone(),
             Assets {
                 ..Default::default()
@@ -165,7 +160,7 @@ mod tests {
             pair_id: "2",
             ..Default::default()
         }))];
-        let exchange = SimulatedExchange::new(
+        let exchange = ExchangeSimulation::new(
             expected_stream.clone(),
             Assets {
                 ..Default::default()
@@ -187,7 +182,7 @@ mod tests {
             }),
             base: None,
         };
-        let exchange = SimulatedExchange::new(
+        let exchange = ExchangeSimulation::new(
             vec![],
             expected_assets.clone(),
             ExchangeOptions {
@@ -207,7 +202,7 @@ mod tests {
                 name: "BTC".into(),
             }),
         };
-        let exchange = SimulatedExchange::new(
+        let exchange = ExchangeSimulation::new(
             vec![],
             expected_assets.clone(),
             ExchangeOptions {
@@ -221,7 +216,7 @@ mod tests {
     #[async_std::test]
     async fn place_market_order_should_return_bought_amount() {
         let message_id = Uuid::from_u128(0);
-        let mut exchange = SimulatedExchange::new(
+        let mut exchange = ExchangeSimulation::new(
             vec![Msg {
                 data: MsgData::LivePriceUpdated(PriceUpdated {
                     pair_id: "BTC/USDT",
@@ -259,7 +254,7 @@ mod tests {
     #[async_std::test]
     async fn place_market_order_should_return_different_bought_amount() {
         let message_id = Uuid::from_u128(0);
-        let mut exchange = SimulatedExchange::new(
+        let mut exchange = ExchangeSimulation::new(
             vec![Msg {
                 data: MsgData::LivePriceUpdated(PriceUpdated {
                     pair_id: "BTC/USDT",
@@ -298,7 +293,7 @@ mod tests {
     #[async_std::test]
     async fn place_market_order_should_return_sold_amount() {
         let message_id = Uuid::from_u128(0);
-        let mut exchange = SimulatedExchange::new(
+        let mut exchange = ExchangeSimulation::new(
             vec![Msg {
                 data: MsgData::LivePriceUpdated(PriceUpdated {
                     pair_id: "BTC/USDT",
@@ -336,7 +331,7 @@ mod tests {
 
     #[async_std::test]
     async fn place_market_order_should_return_sold_amount_deducting_fees() {
-        let mut exchange = SimulatedExchange::new(
+        let mut exchange = ExchangeSimulation::new(
             vec![Msg {
                 data: MsgData::LivePriceUpdated(PriceUpdated {
                     pair_id: "BTC/USDT",
@@ -373,7 +368,7 @@ mod tests {
 
     #[async_std::test]
     async fn place_market_order_should_return_different_sold_amount_deducting_fees() {
-        let mut exchange = SimulatedExchange::new(
+        let mut exchange = ExchangeSimulation::new(
             vec![Msg {
                 data: MsgData::LivePriceUpdated(PriceUpdated {
                     pair_id: "BTC/USDT",
@@ -411,7 +406,7 @@ mod tests {
     #[async_std::test]
     async fn place_market_order_should_return_bought_amount_with_multiple_prices() {
         let message_id = Uuid::from_u128(0);
-        let mut exchange = SimulatedExchange::new(
+        let mut exchange = ExchangeSimulation::new(
             vec![
                 Msg {
                     data: MsgData::LivePriceUpdated(PriceUpdated {
@@ -462,7 +457,7 @@ mod tests {
 
     #[async_std::test]
     async fn place_market_order_should_update_assets_after_buying() {
-        let mut exchange = SimulatedExchange::new(
+        let mut exchange = ExchangeSimulation::new(
             vec![Msg {
                 data: MsgData::LivePriceUpdated(PriceUpdated {
                     pair_id: "BTC/USDT",
@@ -510,7 +505,7 @@ mod tests {
 
     #[async_std::test]
     async fn place_market_order_should_update_different_assets_after_buying() {
-        let mut exchange = SimulatedExchange::new(
+        let mut exchange = ExchangeSimulation::new(
             vec![Msg {
                 data: MsgData::LivePriceUpdated(PriceUpdated {
                     pair_id: "BTC/USDT",
@@ -558,7 +553,7 @@ mod tests {
 
     #[async_std::test]
     async fn place_market_order_should_update_assets_after_selling() {
-        let mut exchange = SimulatedExchange::new(
+        let mut exchange = ExchangeSimulation::new(
             vec![Msg {
                 data: MsgData::LivePriceUpdated(PriceUpdated {
                     pair_id: "BTC/USDT",
@@ -606,7 +601,7 @@ mod tests {
 
     #[async_std::test]
     async fn place_market_order_should_update_different_assets_after_selling() {
-        let mut exchange = SimulatedExchange::new(
+        let mut exchange = ExchangeSimulation::new(
             vec![Msg {
                 data: MsgData::LivePriceUpdated(PriceUpdated {
                     pair_id: "BTC/USDT",
@@ -654,7 +649,7 @@ mod tests {
 
     #[async_std::test]
     async fn place_market_order_should_handle_zero_price_for_buying() {
-        let mut exchange = SimulatedExchange::new(
+        let mut exchange = ExchangeSimulation::new(
             vec![Msg {
                 data: MsgData::LivePriceUpdated(PriceUpdated {
                     pair_id: "BTC/USDT",

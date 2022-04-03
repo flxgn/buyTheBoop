@@ -4,15 +4,15 @@ use anyhow::Result;
 use async_trait::async_trait;
 
 #[derive(Debug, PartialEq, Clone, Default)]
-pub struct SimpleCrossover {
+pub struct Crossover {
     offset: f64,
     latest_average: Option<Price>,
     latest_live: Option<Price>,
 }
 
-impl SimpleCrossover {
+impl Crossover {
     pub fn new(offset: f64) -> Self {
-        SimpleCrossover {
+        Crossover {
             offset,
             ..Default::default()
         }
@@ -20,7 +20,7 @@ impl SimpleCrossover {
 }
 
 #[async_trait]
-impl Actor for SimpleCrossover {
+impl Actor for Crossover {
     async fn act(&mut self, msg: &Msg) -> Result<Vec<MsgData>> {
         let res = match &msg.data {
             MsgData::LivePriceUpdated(e) => {
@@ -67,7 +67,7 @@ mod tests {
 
     #[async_std::test]
     async fn actor_should_emit_nothing_if_only_average_price_updated() {
-        let mut aggr = SimpleCrossover::new(0.0);
+        let mut aggr = Crossover::new(0.0);
         let msg = Msg::with_data(MsgData::AveragePriceUpdated(PriceUpdated {
             pair_id: "pair_id",
             datetime: 0,
@@ -81,7 +81,7 @@ mod tests {
 
     #[async_std::test]
     async fn actor_should_emit_nothing_if_only_live_price_updated() {
-        let mut aggr = SimpleCrossover::new(0.0);
+        let mut aggr = Crossover::new(0.0);
         let msg = Msg::with_data(MsgData::LivePriceUpdated(PriceUpdated {
             pair_id: "pair_id",
             datetime: 0,
@@ -95,7 +95,7 @@ mod tests {
 
     #[async_std::test]
     async fn actor_should_emit_buy_msg_if_live_price_crosses_average_upwards() {
-        let mut aggr = SimpleCrossover::new(0.0);
+        let mut aggr = Crossover::new(0.0);
         let average_updated = Msg::with_data(MsgData::AveragePriceUpdated(PriceUpdated {
             pair_id: "pair_id",
             datetime: 0,
@@ -123,7 +123,7 @@ mod tests {
 
     #[async_std::test]
     async fn actor_should_emit_nothing_if_live_price_stays_above_average() {
-        let mut aggr = SimpleCrossover::new(0.0);
+        let mut aggr = Crossover::new(0.0);
         let average_updated = Msg::with_data(MsgData::AveragePriceUpdated(PriceUpdated {
             pair_id: "pair_id",
             datetime: 0,
@@ -151,7 +151,7 @@ mod tests {
 
     #[async_std::test]
     async fn actor_should_emit_buy_msg_if_live_price_starts_above_average() {
-        let mut aggr = SimpleCrossover::new(0.0);
+        let mut aggr = Crossover::new(0.0);
         let average_updated = Msg::with_data(MsgData::AveragePriceUpdated(PriceUpdated {
             pair_id: "pair_id",
             datetime: 0,
@@ -173,7 +173,7 @@ mod tests {
     #[async_std::test]
     async fn actor_should_emit_buy_msg_if_live_price_starts_above_average_with_prior_already_above()
     {
-        let mut aggr = SimpleCrossover::new(0.0);
+        let mut aggr = Crossover::new(0.0);
         let live_updated_1 = Msg::with_data(MsgData::LivePriceUpdated(PriceUpdated {
             pair_id: "pair_id",
             datetime: SECOND,
@@ -201,7 +201,7 @@ mod tests {
 
     #[async_std::test]
     async fn actor_should_emit_no_buy_if_average_price_update_after_live() {
-        let mut aggr = SimpleCrossover::new(0.0);
+        let mut aggr = Crossover::new(0.0);
         let live_updated = Msg::with_data(MsgData::LivePriceUpdated(PriceUpdated {
             pair_id: "pair_id",
             datetime: SECOND,
@@ -223,7 +223,7 @@ mod tests {
 
     #[async_std::test]
     async fn actor_should_emit_sell_msg_if_live_price_crosses_average_downwards() {
-        let mut aggr = SimpleCrossover::new(0.0);
+        let mut aggr = Crossover::new(0.0);
         let average_updated = Msg::with_data(MsgData::AveragePriceUpdated(PriceUpdated {
             pair_id: "pair_id",
             datetime: 0,
@@ -251,7 +251,7 @@ mod tests {
 
     #[async_std::test]
     async fn actor_should_emit_nothing_if_live_price_stays_below_average() {
-        let mut aggr = SimpleCrossover::new(0.0);
+        let mut aggr = Crossover::new(0.0);
         let average_updated = Msg::with_data(MsgData::AveragePriceUpdated(PriceUpdated {
             pair_id: "pair_id",
             datetime: 0,
@@ -279,7 +279,7 @@ mod tests {
 
     #[async_std::test]
     async fn actor_should_emit_sell_msg_if_live_price_starts_below_average() {
-        let mut aggr = SimpleCrossover::new(0.0);
+        let mut aggr = Crossover::new(0.0);
         let average_updated = Msg::with_data(MsgData::AveragePriceUpdated(PriceUpdated {
             pair_id: "pair_id",
             datetime: 0,
@@ -301,7 +301,7 @@ mod tests {
     #[async_std::test]
     async fn actor_should_emit_sell_msg_if_live_price_starts_below_average_with_prior_already_below(
     ) {
-        let mut aggr = SimpleCrossover::new(0.0);
+        let mut aggr = Crossover::new(0.0);
         let live_updated_1 = Msg::with_data(MsgData::LivePriceUpdated(PriceUpdated {
             pair_id: "pair_id",
             datetime: SECOND,
@@ -329,7 +329,7 @@ mod tests {
 
     #[async_std::test]
     async fn actor_should_emit_no_sell_if_average_price_update_after_live() {
-        let mut aggr = SimpleCrossover::new(0.0);
+        let mut aggr = Crossover::new(0.0);
         let live_updated = Msg::with_data(MsgData::LivePriceUpdated(PriceUpdated {
             pair_id: "pair_id",
             datetime: SECOND,
@@ -351,7 +351,7 @@ mod tests {
 
     #[async_std::test]
     async fn actor_should_not_emit_buy_msg_if_live_price_starts_above_average_but_below_offset() {
-        let mut aggr = SimpleCrossover::new(0.1);
+        let mut aggr = Crossover::new(0.1);
         let average_updated = Msg::with_data(MsgData::AveragePriceUpdated(PriceUpdated {
             pair_id: "pair_id",
             datetime: 0,
@@ -372,7 +372,7 @@ mod tests {
 
     #[async_std::test]
     async fn actor_should_emit_buy_msg_if_live_price_crosses_average_upwards_with_offset() {
-        let mut aggr = SimpleCrossover::new(0.3);
+        let mut aggr = Crossover::new(0.3);
         let average_updated = Msg::with_data(MsgData::AveragePriceUpdated(PriceUpdated {
             pair_id: "pair_id",
             datetime: 0,
@@ -400,7 +400,7 @@ mod tests {
 
     #[async_std::test]
     async fn actor_should_emit_buy_msg_if_live_price_starts_above_average_with_offset() {
-        let mut aggr = SimpleCrossover::new(0.3);
+        let mut aggr = Crossover::new(0.3);
         let average_updated = Msg::with_data(MsgData::AveragePriceUpdated(PriceUpdated {
             pair_id: "pair_id",
             datetime: 0,
@@ -421,7 +421,7 @@ mod tests {
 
     #[async_std::test]
     async fn actor_should_not_emit_sell_msg_if_live_price_starts_below_average_but_above_offset() {
-        let mut aggr = SimpleCrossover::new(0.1);
+        let mut aggr = Crossover::new(0.1);
         let average_updated = Msg::with_data(MsgData::AveragePriceUpdated(PriceUpdated {
             pair_id: "pair_id",
             datetime: 0,
@@ -442,7 +442,7 @@ mod tests {
 
     #[async_std::test]
     async fn actor_should_emit_sell_msg_if_live_price_crosses_average_downwards_with_offset() {
-        let mut aggr = SimpleCrossover::new(0.3);
+        let mut aggr = Crossover::new(0.3);
         let average_updated = Msg::with_data(MsgData::AveragePriceUpdated(PriceUpdated {
             pair_id: "pair_id",
             datetime: 0,
@@ -470,7 +470,7 @@ mod tests {
 
     #[async_std::test]
     async fn actor_should_emit_sell_msg_if_live_price_starts_below_average_with_offset() {
-        let mut aggr = SimpleCrossover::new(0.3);
+        let mut aggr = Crossover::new(0.3);
         let average_updated = Msg::with_data(MsgData::AveragePriceUpdated(PriceUpdated {
             pair_id: "pair_id",
             datetime: 0,

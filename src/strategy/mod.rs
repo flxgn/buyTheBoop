@@ -1,2 +1,2 @@
-pub mod simple_crossover;
+pub mod crossover;
 pub mod sliding_average;

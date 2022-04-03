@@ -1,4 +1,3 @@
-pub mod okex;
 pub mod simulation;
 pub mod trade;
 
@@ -34,12 +33,6 @@ pub struct Asset {
 pub struct Assets {
     pub base: Option<Asset>,
     pub quote: Option<Asset>,
-}
-
-#[derive(Debug, Clone)]
-pub enum ExchangeStreamEvent {
-    Subscription(Subscription),
-    Pair(Pair),
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Default)]
