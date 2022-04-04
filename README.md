@@ -1,12 +1,12 @@
 # Buy the Boop
-Fun project which simulates a crypto exchange and trading strategies applied over time.
+Toy project which simulates a crypto exchange and trading strategies applied over time.
 
 ## Try it out
 You need rust installed on your system:
 ```
 cargo run
 ```
-This will create `result.svg` which shows a graph about how the trading strategy performed. 
+This will create a `result.svg` file which shows a graph about how the trading strategy performed. 
 
 The lower graph shows the value of the account if you would have just bought and hold (blue line). As well as the value of the assets which were traded with the bot (red line).
 
