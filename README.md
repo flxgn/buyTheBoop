@@ -14,6 +14,3 @@ The upper graph shows the price of the crypto coin (blue line) and indicates at 
 
 ## Strategy
 The current strategy aims to buy coin when the current price crosses the average upwards and sells coin when the current price crosses the average downwards.
-
-## Technical Design
-The current implementation uses actors which are chained together by channels. Every message (e.g. price update from the exchange) will go through the actors one by one which will then filter messages, create new downstream messages or perform side effects. This way, the order of the messages stays the same, which makes the simulation of long time periods possible. This also makes the application more modular and extensible because the actors can be chained together at a higher level.
